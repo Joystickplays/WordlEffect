@@ -47,54 +47,30 @@ There is almost no text on purpose. The only words on screen are the small label
 
 ## What you see
 
-All of it is drawn on the GPU behind the board, so the light shows through the glass tiles.
-
-- **The world wakes only from letters you find.** A guess with no hits leaves it dark. One green letter wakes a few
-  hundred shards; the full school, the clouds and the frame only arrive as you close in. Guessing alone adds nothing.
-- **The school.** About 2,400 crisp shards, tumbling flakes and a few sparks swim along a flowing current that slowly
-  circles the board. Near ones are larger and out of focus, far ones tiny and sharp. Shards catch the light as they
-  turn, like fish scales.
-- **Colour.** Deep blue drifting toward teal as you progress, with violet and magenta clouds. The tint also shifts
-  with whichever chord the music is on. A win turns everything into slowly cycling colour; a loss turns it cold and
-  lets it snow.
-- **The frame.** A large rounded square behind the board, echoing the tiles. It breathes on a spring when you type,
-  shrinks a little when you delete, flashes and lets its light drift along the edge when you find a letter, shakes
-  when a word is rejected, and springs wide on a win.
-- **Each check.** As each letter is checked, the letter and its tile flash white, then hand over to the coloured
-  glass. Greens burst into green shards and send out a soft ring; ambers circle their tile, then wander along the
-  row as if looking for their seat; misses drop a few dull flakes.
-- **Light you keep.** Light from every new green stays, joining a slow galaxy that orbits the board until the round
-  ends. A win throws all of it outward in a supernova, and the fewer guesses you used, the brighter it is.
+- **It starts dark.** Only correct letters bring the light in. Guessing alone doesn't.
+- **A school of light.** Thousands of tiny shards drift around the board and glint as they turn.
+- **Colour.** Deep blue that slowly warms to teal as you get closer.
+- **The frame.** A big glowing square behind the board that reacts to every key you press.
+- **Every check flashes.** Each letter lights up white as it's checked, then settles into its colour.
+- **Light you keep.** Every green you find adds to a galaxy around the board. Solve it, and it all bursts.
 
 ## What you hear
 
-Everything is synthesized live in the browser except the piano, which is a real sampled grand. Each note gets small
-random differences in timing, loudness and tuning, so nothing sounds mechanical.
+- **Each column has a note.** Green letters play C, E, G, B, C on piano, so solving plays the full chord.
+- **Every word has a tune.** Each letter has its own note, so typing a word plays a little melody.
+- **Everything lands on the beat.** Letters are revealed in time with the music.
+- **The music grows with you.** A quiet drone at first, then pads, bells and a heartbeat as you find letters.
+- **It gets tense near the end.** One or two letters left, or few guesses left, and a soft pulse starts ticking.
+- **Endings.** Win, and the piano plays your word's tune back to you. Lose, and it plays the answer, softly.
 
-- **The arpeggio.** Each column owns one note of a C major 7 arpeggio, C E G B and C an octave up. A green letter
-  plays its column's note as a sustained, echoing piano note, so solving the word plays the whole arpeggio home.
-  Amber letters play a soft glass tone that slides up into pitch; misses are a muffled low note that stays in key.
-- **On the beat.** Reveals wait for the next beat of the music instead of firing on the keypress.
-- **Every word has a tune.** Each letter maps to a note of the pentatonic scale, so typing a word plays its own little
-  melody. Deleting plays the note backwards.
-- **The bed.** A quiet drone fades in on your first keypress. Under it the chords move slowly through C, A minor, F
-  and G. As the world wakes, a pad opens up, a high shimmer joins, a music box starts wandering the scale, and near
-  the end a soft heartbeat comes in.
-- **Tension.** When only one or two letters are missing, or you are down to your last guesses, a muted pulse starts
-  ticking on the chord's root and fifth, a shaker joins, and the heartbeat doubles its pace.
-- **Endings.** A win settles on a quiet chord of home and plays the solved word's own tune back as a melody. A loss
-  settles on A minor and plays the answer's tune softly as its letters appear under the board.
+The piano is a real sampled grand. Everything else is made live in the browser, with tiny human imperfections.
 
 ## Combos and scoring
 
-**Chains.** Green letters side by side in one guess link up with threads of light, their notes gain an octave above,
-and a rising glass run plays after the row.
+- **Chains.** Greens next to each other link up with light and ring out brighter.
+- **Streaks.** Find a new green on every guess and rings of light build up around the board.
 
-**Streaks.** Each guess in a row that finds a new green adds a ring of light orbiting the board. A streak of two
-brings in the heartbeat. A guess with no new green lets the rings fall away.
-
-The side panel shows guesses used, the streak and a ring that fills as the world lights up on the left; time, the
-round's score and the session total on the right.
+The side panel shows your guesses, streak and progress on the left, and time and score on the right.
 
 | Event | Points |
 | --- | --- |
@@ -153,30 +129,23 @@ the piano.
 
 A few details worth knowing:
 
-- **One GPU draw per frame.** Every particle, cloud, ring and letter is one instance of a single quad; the fragment
-  shader decides its shape (shard, flake, spark, cloud, ring, frame, letter or tile). The simulation runs on the CPU
-  and takes well under a millisecond per frame for about 3,000 instances.
-- **The school swims in a curl field**, a flow with no sources or sinks, so it streams and eddies without ever
-  clumping, plus a slow swirl around the board.
-- **HDR letters line up with the real ones.** The letters are drawn into a texture using the page's own font and
-  layout metrics, so the GPU letter lands within a fraction of a pixel of the DOM letter before handing over to it.
-- **Sound drives light.** The music's heartbeat, chord changes and music-box notes are sent to the visuals, which
-  pulse, shift colour and make patches of the school flicker in time.
-- **The beat grid.** Audio is scheduled ahead on Web Audio's clock; visuals for each reveal are timed to the same
-  moment, so a flash and its note land together.
+- **One draw call.** Every particle, cloud and letter is one GPU quad; the shader decides its shape.
+- **Fast.** The simulation takes under a millisecond a frame for about 3,000 particles.
+- **No clumping.** The school follows a curl-noise flow, so it streams and swirls but never bunches up.
+- **The letters match.** HDR letters use the page's own font metrics, so they line up with the real ones.
+- **Sound drives light.** Heartbeats, chord changes and bell notes make the visuals pulse in time.
 
 ## Accessibility
 
-- Every result is announced to screen readers: each letter's state, invalid words, wins and the answer on a loss.
-- With **reduce motion** turned on, particle counts drop to about a third, the win flash is dimmed, the row shake is
-  skipped, and tile animations are off.
-- Full keyboard play; on-screen keys are real buttons with labels.
+- Screen readers hear every result.
+- **Reduce motion** cuts particles, the shake and tile animations.
+- Fully playable by keyboard.
 
 ## Known limits
 
-- The piano is silent offline or until its samples load; the rest of the music still plays.
-- Answers are random each round, not a daily word, and there are no saved stats.
-- Safari's HDR output is not confirmed (see [HDR](#hdr)).
+- No internet, no piano. The rest of the music still plays.
+- Random word each round, no daily puzzle or saved stats.
+- HDR in Safari isn't confirmed yet (see [HDR](#hdr)).
 
 ## Credits
 
