@@ -7,13 +7,15 @@ squares, and every letter you find wakes a little more of it: schools of light, 
 soundtrack that grows from one low drone into piano, bells and a heartbeat. The idea is: what if Wordle were played
 the way Tetris Effect plays Tetris? Calm, multi-sensory, and almost wordless, ironically.
 
-<p align="center">
-  <img src="docs/demo.gif" alt="A round of WordlEffect: a guess with four green letters links them with light, then the solve sets off a burst of particles that settles into a slow galaxy around the board." width="600">
-</p>
-
-**▶ [Watch the full demo with sound (docs/demo.mp4, 25 s)](docs/demo.mp4)** — the sound is half the game.
+## TRY IT HERE: https://wordleffect.vercel.app
 
 ![A solved board glowing green in front of a violet nebula, with drifting shards of light and the score on the side.](docs/still.png)
+
+
+
+https://github.com/user-attachments/assets/45bbfa04-e233-458d-8001-7856e0133c96
+
+*🔊 Sound up!*
 
 ---
 
