@@ -5,7 +5,7 @@ A five-letter word game where the world starts as nothing and lights up as you f
 It plays like Wordle: six guesses at a hidden five-letter word. But the screen begins pure black with thirty faint
 squares, and every letter you find wakes a little more of it: schools of light, colour clouds, a glowing frame and a
 soundtrack that grows from one low drone into piano, bells and a heartbeat. The idea is: what if Wordle were played
-the way Tetris Effect plays Tetris? Calm, multi-sensory, and almost wordless.
+the way Tetris Effect plays Tetris? Calm, multi-sensory, and almost wordless, ironically.
 
 <p align="center">
   <img src="docs/demo.gif" alt="A round of WordlEffect: a guess with four green letters links them with light, then the solve sets off a burst of particles that settles into a slow galaxy around the board." width="600">
@@ -40,10 +40,8 @@ Type a five-letter word and press **Enter**. Each letter is checked in turn, on 
 | Amber glass | The letter is in the word, somewhere else |
 | Dim | The letter is not in the word |
 
-Guesses must be real words (about 12,600 are accepted); answers come from 800 common ones. Use your keyboard or the
+Guesses must be real words (about 12,600 are accepted); answers come from 800 common ones (so you won't get something like `avyze`). Use your keyboard or the
 on-screen keys. When a round ends, the **⏎** key pulses: press Enter to play again. The session total carries over.
-
-There is almost no text on purpose. The only words on screen are the small labels beside the board.
 
 ## What you see
 
@@ -63,7 +61,7 @@ There is almost no text on purpose. The only words on screen are the small label
 - **It gets tense near the end.** One or two letters left, or few guesses left, and a soft pulse starts ticking.
 - **Endings.** Win, and the piano plays your word's tune back to you. Lose, and it plays the answer, softly.
 
-The piano is a real sampled grand. Everything else is made live in the browser, with tiny human imperfections.
+The piano is a real sampled grand. Everything else is made live in the browser.
 
 ## Combos and scoring
 
@@ -113,7 +111,7 @@ npm run lint     # oxlint
 ```
 
 The piano samples stream from the Tone.js sample host the first time you press a key, so you need to be online for
-the piano.
+the piano. Though, any other sample works just fine offline since they're synthesized right then in your browser.
 
 ## How it works
 
@@ -147,11 +145,18 @@ A few details worth knowing:
 - Random word each round, no daily puzzle or saved stats.
 - HDR in Safari isn't confirmed yet (see [HDR](#hdr)).
 
+## Planned
+
+- Daily puzzle and stats (all done and saved in browser locally, date is hashed).
+- WordlEffect bot that analyzes your guesses.
+- Multi-player mode.
+
 ## Credits
 
 - Piano: [Salamander Grand Piano](https://sfzinstruments.github.io/pianos/salamander) by Alexander Holm, CC-BY 3.0,
   via the [Tone.js](https://tonejs.github.io/) sample host.
 - Word list derived from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT).
+- Claude Opus 5.5.
 - Built with React, TypeScript and Vite.
 - Inspired by [Wordle](https://www.nytimes.com/games/wordle/) and [Tetris Effect](https://www.tetriseffect.game/).
   WordlEffect is an independent fan project, not affiliated with or endorsed by The New York Times, Enhance or The Tetris
