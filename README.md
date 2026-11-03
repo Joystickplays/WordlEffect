@@ -1,4 +1,4 @@
-# Lumen
+# WordlEffect
 
 A five-letter word game where the world starts as nothing and lights up as you find the answer.
 
@@ -8,7 +8,7 @@ soundtrack that grows from one low drone into piano, bells and a heartbeat. The 
 the way Tetris Effect plays Tetris? Calm, multi-sensory, and almost wordless.
 
 <p align="center">
-  <img src="docs/demo.gif" alt="A round of Lumen: a guess with four green letters links them with light, then the solve sets off a burst of particles that settles into a slow galaxy around the board." width="600">
+  <img src="docs/demo.gif" alt="A round of WordlEffect: a guess with four green letters links them with light, then the solve sets off a burst of particles that settles into a slow galaxy around the board." width="600">
 </p>
 
 **▶ [Watch the full demo with sound (docs/demo.mp4, 25 s)](docs/demo.mp4)** — the sound is half the game.
@@ -185,5 +185,5 @@ A few details worth knowing:
 - Word list derived from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT).
 - Built with React, TypeScript and Vite.
 - Inspired by [Wordle](https://www.nytimes.com/games/wordle/) and [Tetris Effect](https://www.tetriseffect.game/).
-  Lumen is an independent fan project, not affiliated with or endorsed by The New York Times, Enhance or The Tetris
+  WordlEffect is an independent fan project, not affiliated with or endorsed by The New York Times, Enhance or The Tetris
   Company.
