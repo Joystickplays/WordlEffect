@@ -398,3 +398,22 @@ canvas.fx {
     animation: none !important;
   }
 }
+
+/* the source link: barely there until you look for it */
+.repo {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  width: 16px;
+  height: 16px;
+  color: rgb(255 255 255 / 0.14);
+  transition: color 0.4s;
+}
+.repo:hover,
+.repo:focus-visible {
+  color: rgb(255 255 255 / 0.6);
+}
+.repo svg {
+  display: block;
+  fill: currentColor;
+}
