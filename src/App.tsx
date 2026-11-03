@@ -51,6 +51,7 @@ export default function App() {
   const [ghost, setGhost] = useState(0) // answer letters shown after a loss
   const [energy, setEnergy] = useState(0)
   const [said, say] = useState('')
+  const [full, setFull] = useState(false)
   const [woke, setWoke] = useState(false)
   const [streak, setStreak] = useState(0)
   const [scored, setPoints] = useState(0)
@@ -85,6 +86,12 @@ export default function App() {
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, fs: parseFloat(getComputedStyle(el).fontSize) }
   }
   const tile = (r: number, c: number) => center(tileEls.current[r * COLS + c])
+
+  useEffect(() => {
+    const sync = () => setFull(!!document.fullscreenElement)
+    document.addEventListener('fullscreenchange', sync)
+    return () => document.removeEventListener('fullscreenchange', sync)
+  }, [])
 
   useEffect(() => {
     if (!clock.start || clock.end) return
@@ -303,7 +310,19 @@ export default function App() {
         ))}
       </div>
 
-      <a className="repo" href="https://github.com/Joystickplays/WordlEffect" target="_blank" rel="noopener noreferrer" aria-label="Source code on GitHub">
+      {document.fullscreenEnabled && (
+        <button
+          className="corner full"
+          aria-label={full ? 'Exit fullscreen' : 'Fullscreen'}
+          onMouseDown={e => e.preventDefault()} // keep focus off it, so Enter still submits guesses
+          onClick={() => (full ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {})}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d={full ? 'M6 1v5H1M10 1v5h5M6 15v-5H1M10 15v-5h5' : 'M1 6V1h5M15 6V1h-5M1 10v5h5M15 10v5h-5'} />
+          </svg>
+        </button>
+      )}
+      <a className="corner repo" href="https://github.com/Joystickplays/WordlEffect" target="_blank" rel="noopener noreferrer" aria-label="Source code on GitHub">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
         </svg>
