@@ -5,10 +5,10 @@ import { joinRoom, selfId } from 'trystero'
 import type { Lang } from './words.ts'
 
 export { selfId }
-export const V = 2 // bump when messages change shape, so mismatched versions say so instead of misbehaving
+export const V = 3 // bump when messages change shape, so mismatched versions say so instead of misbehaving
 
 export type Mode = 'light' | 'tide' | 'stars'
-export const TRIALS = ['strict', 'undertow', 'fading', 'frost', 'squatter', 'potato', 'rigged', 'jinx'] as const
+export const TRIALS = ['strict', 'undertow', 'fading', 'frost', 'squatter', 'rigged', 'jinx'] as const
 export type Trial = (typeof TRIALS)[number]
 export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number; lang: Lang; skills: boolean }
 export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3, lang: 'en', skills: false }
@@ -21,11 +21,10 @@ export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; 
 // One player's whole panel. Marks only ("ccpaa"), never letters.
 export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean; bag: string; guard: string }
 export type Lock = { to: string; n: number }
-// Everything else players do to each other: throwing the hot potato, rigging a word, using a skill.
-export type Potato = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
+// Everything else players do to each other: rigging a word, swapping boards.
 export type Board = { answer: string; rows: string[]; sealed: number }
 export type Swap = { k: 'swap'; to: string; reply: boolean; ok: boolean; bounced: boolean; board: Board | null }
-export type Ev = Potato | { k: 'rig'; to: string; word: string } | Swap
+export type Ev = { k: 'rig'; to: string; word: string } | Swap
 type Hello = { v: number; since: number }
 
 type Obj = Record<string, unknown>
@@ -34,7 +33,7 @@ const num = (x: unknown, lo: number, hi: number) => typeof x === 'number' && Num
 const int = (x: unknown, lo: number, hi: number) => num(x, lo, hi) && Number.isInteger(x)
 
 const okSettings = (s: unknown) =>
-  obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 255) &&
+  obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 127) &&
   int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number) && (s.lang === 'en' || s.lang === 'id') && typeof s.skills === 'boolean'
 const okRoom = (r: unknown): r is Room =>
   obj(r) && okSettings(r.settings) && (r.phase === 'lobby' || r.phase === 'play') && int(r.seed, 0, 2 ** 32) && int(r.round, 0, 1e6) &&
@@ -51,8 +50,7 @@ const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && 
 const id = (x: unknown) => typeof x === 'string' && x.length < 64
 const okEv = (e: unknown): e is Ev =>
   obj(e) && id(e.to) &&
-  ((e.k === 'potato' && int(e.fuse, 0, 60000) && int(e.gen, 0, 1e6) && typeof e.boom === 'boolean') ||
-    (e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)) ||
+  ((e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)) ||
     (e.k === 'swap' && typeof e.reply === 'boolean' && typeof e.ok === 'boolean' && typeof e.bounced === 'boolean' && (e.board === null || okBoard(e.board))))
 const five = (w: unknown) => typeof w === 'string' && /^[a-z]{5}$/.test(w)
 const okBoard = (b: unknown) => obj(b) && five(b.answer) && Array.isArray(b.rows) && b.rows.length <= 7 && b.rows.every(five) && int(b.sealed, 0, 7)

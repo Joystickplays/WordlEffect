@@ -480,18 +480,6 @@ export class FX {
     this.poke(-0.03, 0.4, 0.25)
   }
 
-  // Hot potato: a puff of warm sparks as it's caught, or a fiery pop with smoke when it goes off.
-  potato({ x, y }: Pt, boom: boolean) {
-    const fire = () => hsl(rand(10, 45), 1, rand(0.5, 0.7))
-    if (!boom) return this.burst(x, y, 30, { col: fire, speed: [30, 160], life: [0.5, 1], scale: 0.8, grav: -30, sparks: 0.3 })
-    this.burst(x, y, 260, { col: fire, speed: [80, 700], life: [0.8, 2.2], scale: 1.1, grav: 60, sparks: 0.35, hot: 3.2 })
-    for (let i = 0; i < 6; i++)
-      this.add({ x: x + rand(-60, 60), y: y + rand(-40, 40), vx: rand(-20, 20), vy: rand(-50, -20), drag: 0.99, life: rand(2, 3.5), size: rand(80, 160), shape: CLOUD, aspect: 1, align: false, rgb: hsl(25, 0.3, 0.35), a: 0.5, hot: 1 })
-    this.poke(0.08, 0.9, 0.2)
-    this.rim.xv += 220
-    this.wave(x, y, hsl(30, 1, 0.65), 0.8)
-  }
-
   // Squatter: a letter slams into a box from above, stamped in the sender's colour.
   squat(t: Tile, ch: string, hue: number) {
     const col = hsl(hue, 0.9, 0.7)

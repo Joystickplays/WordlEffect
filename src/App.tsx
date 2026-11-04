@@ -3,7 +3,7 @@ import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Potato, type Swap, type Board } from './net.ts'
+import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
 import { Setup, Panel, Which, Icon } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 
@@ -26,7 +26,6 @@ const freshMatch = () => ({
   rig: null as { word: string; by: string } | null, // Rigged: the next word someone picked for us
   bag: [] as Skill[], dusk: 0, wind: false, decoy: 0, mirror: false, // Skills: what we hold, and what's switched on
   swap: '', // Swap: who we've asked, while we wait for their board
-  potato: { holder: '', gen: 0, fuse: 0 }, // Hot potato: who has it, which throw this is, and (if it's ours) when it goes off
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
@@ -87,7 +86,6 @@ export default function App() {
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
   const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
   const [squat, setSquat] = useState<Record<number, { ch: string; by: string }>>({}) // Squatter: letters stuck in the next row
-  const [potato, setPotato] = useState('') // who is holding the hot potato
   const [bag, setBag] = useState<Skill[]>([]) // Skills: up to three, slot by slot
   const [spin, setSpin] = useState(-1) // the slot whose reel is still spinning
   const [hint, setHint] = useState<{ pos: number; ch: string } | null>(null) // Lantern: a letter lit in its box
@@ -149,7 +147,6 @@ export default function App() {
   // Tide: when the time is up, you stop; the match ends once everyone has.
   const tideCheck = useEffectEvent(() => {
     const m = mp.current
-    if (m.live && !m.ended && m.potato.holder === selfId && m.potato.fuse && performance.now() > m.potato.fuse) boom()
     if (!m.live || m.S.mode !== 'tide' || m.done || m.ended || !m.start || performance.now() - m.start < m.S.tide * 60000) return
     m.done = true
     setCur('')
@@ -303,7 +300,6 @@ export default function App() {
     setResult(res)
     if (!m.live) setClock(c => ({ ...c, end: Date.now() }))
     if (m.live && res === 'won' && m.S.mode === 'stars') m.stars = [...m.stars, performance.now() - m.start]
-    if (m.live && res === 'won' && m.potato.holder === selfId) throwPotato(false)
     if (m.live && res === 'won' && m.S.skills && m.bag.length < 3) spinReel()
     // heavy frost carries this word's locked rows into the next one; a solve in 3 or fewer thaws one
     m.carry = has(m.S, 'frost') ? Math.max(0, m.locked - (res === 'won' && r < 3 ? 1 : 0)) : 0
@@ -441,14 +437,6 @@ export default function App() {
     // a match nobody is still playing in is over: open the lobby again
     const playing = r && Object.keys(r.seats).some(id => (id === selfId ? mp.current.live : ids.includes(id)))
     if (h === selfId && r) publish(r.phase === 'lobby' || !playing ? seat({ ...r, phase: 'lobby' }, ids) : r)
-    // the potato's holder left: the host starts a fresh one on someone still here
-    const m = mp.current
-    if (h === selfId && m.live && m.potato.holder && m.potato.holder !== selfId && !ids.includes(m.potato.holder)) {
-      const holder = [selfId, ...ids].filter(id => id in m.seats)[Math.floor(Math.random() * (ids.length + 1))] ?? selfId
-      const e: Potato = { k: 'potato', to: holder, fuse: 20000 + Math.floor(Math.random() * 40000), gen: m.potato.gen + 1, boom: false }
-      net.current?.ev(e)
-      catchPotato(e, '')
-    }
     net.current?.me(snapshot()) // newcomers need to see us too
     checkEnd()
   }
@@ -467,7 +455,6 @@ export default function App() {
     const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, WORDS[r.settings.lang].answers.length) })
     restart()
     setLive(true)
-    setPotato('')
     setRig(null)
     setBag([])
     setGuard('')
@@ -486,11 +473,6 @@ export default function App() {
       m.start = performance.now()
       setClock({ start: Date.now(), end: 0, now: Date.now() })
       nextWord()
-      if (has(m.S, 'potato')) {
-        // everyone works out the same first holder and fuse from the room's seed
-        const ids = Object.keys(m.seats).sort(), holder = ids[r.seed % ids.length]
-        catchPotato({ k: 'potato', to: holder, fuse: 20000 + ((r.seed >>> 8) % 40000), gen: 0, boom: false }, '')
-      }
     })
   }
 
@@ -521,7 +503,6 @@ export default function App() {
       setLine('your light rests')
     }
     if (m.out || m.done || m.ended || (m.S.mode === 'stars' && m.stars.length >= m.S.stars)) {
-      if (m.potato.holder === selfId) throwPotato(false) // can't hold it from the sidelines
       setPhase('over')
       net.current?.me(snapshot())
       return checkEnd()
@@ -799,56 +780,12 @@ export default function App() {
     snd.current.swap()
   }
 
-  // Hot potato: whoever holds it when its hidden fuse runs out takes 3 locks. Solving a word throws it at the leader.
+  // Everyone else still playing this match, with their scores.
   function lit(exclude = selfId) {
     const m = mp.current, snaps = snapsRef.current
     return Object.keys(m.seats)
       .filter(id => id !== exclude && peersRef.current.includes(id) && snaps[id]?.round === m.round && !snaps[id].out && !snaps[id].done)
       .map(id => ({ id, score: snaps[id].score }))
-  }
-
-  function catchPotato(e: Potato, from: string) {
-    const m = mp.current, p = m.potato
-    if (!m.live || !has(m.S, 'potato') || e.gen < p.gen || (e.gen === p.gen && p.holder && e.to >= p.holder)) return
-    const a = from ? panelEls.current[from] : null, to = e.to === selfId ? board.current : panelEls.current[e.to]
-    if (e.boom && a) {
-      fx.current.potato(center(a), true)
-      snd.current.potato(true, side(from))
-    }
-    if (from && to) fx.current.stream(center(a ?? board.current), center(to), 28, 1)
-    m.potato = { holder: e.to, gen: e.gen, fuse: e.to === selfId ? performance.now() + e.fuse : 0 }
-    setPotato(e.to)
-    if (e.to === selfId && from) {
-      snd.current.potato(false, side(from))
-      flash('you have the potato')
-    }
-    if (e.to !== selfId && from === '' && e.gen === 0) say(`${COLOURS[m.seats[e.to] ?? 0][0]} has the potato`)
-  }
-
-  // Throw it on: at the leader after a solve, at anyone after it goes off (with a fresh fuse).
-  function throwPotato(boomed: boolean) {
-    const m = mp.current, others = lit()
-    if (!others.length) return
-    const to = boomed ? others[Math.floor(Math.random() * others.length)].id : target(others)!.id
-    const e: Potato = { k: 'potato', to, fuse: boomed ? 20000 + Math.floor(Math.random() * 40000) : Math.round(Math.max(1000, m.potato.fuse - performance.now())), gen: m.potato.gen + 1, boom: boomed }
-    net.current?.ev(e)
-    m.potato = { holder: to, gen: e.gen, fuse: 0 }
-    setPotato(to)
-    const el = panelEls.current[to]
-    if (el) fx.current.stream(center(board.current), center(el), 28, 1)
-  }
-
-  function boom() {
-    const m = mp.current
-    m.potato.fuse = 0
-    fx.current.potato(center(board.current), true)
-    snd.current.potato(true, 0)
-    flash('the potato went off')
-    say('The potato went off: 3 locks')
-    m.pending = Math.min(99, m.pending + 3)
-    m.from = [...m.from, selfId, selfId, selfId]
-    setPending(m.pending)
-    throwPotato(true)
   }
 
   // Squatter: waiting locks drop letters into the next row (two at most) instead of freezing rows. The rest wait.
@@ -986,7 +923,7 @@ export default function App() {
     return () => clearTimeout(id)
   }, [rig])
   const onLock = useEffectEvent(gotLock)
-  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'potato' ? catchPotato(e, from) : e.k === 'rig' ? gotRig(e, from) : gotSwap(e, from)))
+  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : gotSwap(e, from)))
   useEffect(() => {
     if (!code) return
     const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
@@ -1097,7 +1034,6 @@ export default function App() {
       {code && room && selfId in room.seats && (
         <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>
           you{live && <Which n={mp.current.n} out={mp.current.out} done={mp.current.done} />}
-          {live && potato === selfId && <span className="potato" aria-label="You have the hot potato">🥔</span>}
         </figcaption>
       )}
       {live && room?.settings.skills && (
@@ -1116,7 +1052,7 @@ export default function App() {
       )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} potato={live && potato === id} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">

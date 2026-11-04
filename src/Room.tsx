@@ -5,7 +5,7 @@ import { SKILLS, type Skill } from './skills.ts'
 const MODES: Mode[] = ['light', 'tide', 'stars']
 const MODE_NAMES = { light: 'last light', tide: 'tide', stars: 'stars' }
 const LOCKS = ['off', 'gentle', 'fierce']
-const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost', 'squatter', 'hot potato', 'rigged', 'jinx']
+const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost', 'squatter', 'rigged', 'jinx']
 const MARK = { c: 'correct', p: 'present', a: 'absent' } as const
 const GUARDS: Record<string, string> = { m: 'Mirror shield is up', d: 'Decoy is up', w: 'Second wind is ready' }
 const after = <T,>(list: readonly T[], v: T) => list[(list.indexOf(v) + 1) % list.length]
@@ -21,7 +21,6 @@ const ABOUT: Record<string, string> = {
   fading: "Colours fade from your board a few seconds after each guess, and the keyboard doesn't keep them. You have to remember what you found.",
   'heavy frost': "Frozen rows stay frozen when you start a new word. Solving a word in 3 guesses or fewer melts one of them.",
   squatter: "Locks don't freeze rows any more. Instead, each one drops a random letter into a box on your next row, and you can't delete it. Your guess has to work around it.",
-  'hot potato': "A hot potato sits on someone's board with a hidden timer. Solve a word to throw it at the leader. Whoever holds it when it goes off gets 3 locks.",
   rigged: "When the leader finishes a word, the player in last place picks the leader's next word from three nasty ones.",
   skills: `Solving a word spins a reel that gives you a skill. Keep up to 3, and press 1, 2 or 3 to use one. ${Object.values(SKILLS).map(s => `${s.name}: ${s.about}`).join(' ')}`,
   jinx: "If you guess exactly the same word as someone else, on the same word number, you both lose a row. Common openers get dangerous.",
@@ -120,7 +119,7 @@ export function Which({ n, out, done }: { n: number; out?: boolean; done?: boole
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, live, potato, pick, el }: { seat: number; snap?: Me; rows: number; live: boolean; potato: boolean; pick?: () => void; el: (e: HTMLElement | null) => void }) {
+export function Panel({ seat, snap, rows, live, pick, el }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void }) {
   const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
     <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0 } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
@@ -141,7 +140,6 @@ export function Panel({ seat, snap, rows, live, potato, pick, el }: { seat: numb
           {!!snap?.stars.length && <span className="stars"> {'✦'.repeat(snap.stars.length)}</span>}
         </span>
         {live && <Which n={snap?.n ?? 0} out={snap?.out} done={snap?.done} />}
-        {potato && <span className="potato" aria-label={`${name} has the hot potato`}>🥔</span>}
       </figcaption>
       {live && !!snap?.bag && (
         <div className="bag small" aria-label={`${name}'s skills: ${[...snap.bag].map(k => SKILLS[k as Skill].name).join(', ')}`}>

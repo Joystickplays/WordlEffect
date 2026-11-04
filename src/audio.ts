@@ -636,20 +636,6 @@ export class Sound {
     this.piano(ROOTS[this.root] + 13, t + EIGHTH * 2.4, 0.18, { decay: 2, bright: 0.4, rev: 0.6, echo: 0.2 }) // a wrong note, on purpose
   }
 
-  // Hot potato: a bouncy catch, or a pop and a fizz when it goes off.
-  potato(boom: boolean, pan: number) {
-    if (!this.ctx) return
-    const c = this.ctx, t = c.currentTime
-    if (!boom) {
-      this.glass(79, t, 0.07, { pan, dur: 0.8, rev: 0.4, echo: 0.2 })
-      this.glass(86, t + 0.09, 0.06, { pan, dur: 0.8, rev: 0.4, echo: 0.2 })
-      return
-    }
-    this.kick(t, 0.9)
-    this.whoosh(t, 1.2, 0.12)
-    ;[72, 75, 79, 84].forEach((m, i) => this.glass(m, t + 0.05 + i * 0.03, 0.06, { pan: pan + (i - 1.5) * 0.2, dur: 2, rev: 0.9, echo: 0.4, scoop: false }))
-  }
-
   // Squatter: a dull wooden thunk as a letter is stamped down.
   squat() {
     if (!this.ctx) return

@@ -117,7 +117,6 @@ that's on multiplies your points by 1.25. Every mode and trial has a small (i) t
 | Fading | Colours drain from your board after a few seconds, and the keyboard keeps none. Play from memory. |
 | Heavy frost | Frozen rows carry into your next word. A solve in 3 or fewer thaws one. |
 | Squatter | Locks stamp a letter you can't delete into your next row instead of freezing it. Your guess works around it. |
-| Hot potato | A potato with a hidden fuse sits on someone's board. Solve a word to throw it at the leader. Whoever holds it when it goes off takes 3 locks. |
 | Rigged | When you're in last place, you pick the leader's next word from three nasty ones. |
 | Jinx | Guess exactly the same word as someone else on the same word number, and you both lose a row. |
 
