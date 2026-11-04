@@ -392,6 +392,16 @@ export class FX {
     setTimeout(() => this.burst(b.x, b.y, 16 * n, { col: ICE, speed: [30, 160], life: [0.6, 1.4], scale: 0.8, sparks: 0.1, hot: 2 }), 1000)
   }
 
+  // Rigged: violet shards spiral in onto your board, like a hand dealing you a bad card.
+  rigged({ x, y }: Pt, hue: number) {
+    const col = hsl(hue, 0.9, 0.7)
+    for (let i = 0; i < 80 * this.q; i++) {
+      const a = rand(0, TAU), r = rand(160, 320)
+      this.add({ x, y, life: rand(0.8, 1.4), delay: rand(0, 0.4), rgb: Math.random() < 0.7 ? col : hsl(280, 0.8, 0.75), ...bit(1, 0.2, 2.4), align: true, orbit: { cx: x, cy: y, r, a, w: 3.5, grow: -r / 1.2 } })
+    }
+    this.poke(-0.03, 0.4, 0.25)
+  }
+
   // Hot potato: a puff of warm sparks as it's caught, or a fiery pop with smoke when it goes off.
   potato({ x, y }: Pt, boom: boolean) {
     const fire = () => hsl(rand(10, 45), 1, rand(0.5, 0.7))

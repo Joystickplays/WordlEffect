@@ -760,3 +760,67 @@ canvas.fx {
     opacity: 0;
   }
 }
+
+/* Rigged: the card for choosing the leader's next word */
+.rig {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--h) 80% 70% / 0.3);
+  background: rgb(12 15 28 / 0.9);
+  box-shadow: 0 0 30px hsl(var(--h) 90% 60% / 0.2);
+  animation: spring 0.55s linear(0, 0.35 8%, 0.82 18%, 1.08 28%, 1.13 33%, 1.09 40%, 0.98 52%, 0.97 60%, 1.005 75%, 1);
+  position: relative;
+  overflow: hidden;
+}
+.rig small {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: hsl(var(--h) 70% 78% / 0.8);
+}
+.rig div {
+  display: flex;
+  gap: 8px;
+}
+.rig button {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  font-size: 15px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.rig button:hover,
+.rig button:focus-visible {
+  border-color: hsl(var(--h) 80% 70% / 0.8);
+  box-shadow: 0 0 14px hsl(var(--h) 90% 60% / 0.4);
+}
+.rig i {
+  font-style: normal;
+  font-size: 10px;
+  margin-right: 6px;
+  opacity: 0.45;
+}
+.rig .fuse {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: hsl(var(--h) 80% 70% / 0.6);
+  transform-origin: left;
+  animation: burn 10s linear forwards;
+}
+@keyframes burn {
+  to {
+    transform: scaleX(0);
+  }
+}

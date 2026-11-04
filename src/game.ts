@@ -124,3 +124,11 @@ export function compose(typed: string, squat: Record<number, string>) {
   let k = 0
   return Array.from({ length: 5 }, (_, i) => squat[i] ?? typed[k++] ?? '').join('')
 }
+
+// Rigged: the nastiest answers, by how rare their letters are and how often a letter repeats.
+export function hardest(answers: string[], share = 0.15) {
+  const freq: Record<string, number> = {}
+  for (const w of answers) for (const ch of new Set(w)) freq[ch] = (freq[ch] ?? 0) + 1
+  const hard = (w: string) => [...w].reduce((s, ch) => s - Math.log(freq[ch] / answers.length), 0) + (5 - new Set(w).size) * 2
+  return [...answers].sort((a, b) => hard(b) - hard(a)).slice(0, Math.max(3, Math.round(answers.length * share)))
+}

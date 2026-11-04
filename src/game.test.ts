@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose, hardest } from './game.ts'
 
 test('score handles exact, misplaced and duplicate letters', () => {
   assert.deepEqual(score('crane', 'crane'), Array(5).fill('correct'))
@@ -114,4 +114,10 @@ test('squatters always leave the row solvable', () => {
   assert.equal(squatLetter(valid, { 0: 'q' }, [], {}), null)
   assert.equal(compose('cne', { 1: 'r', 2: 'a' }), 'crane')
   assert.equal(compose('c', { 1: 'r' }), 'cr')
+})
+
+test('rigged picks from the words with the rarest letters', () => {
+  const words = ['crane', 'stare', 'arise', 'jazzy', 'fuzzy', 'raise', 'crate', 'trace']
+  assert.deepEqual(hardest(words, 0.25).slice(0, 2).sort(), ['fuzzy', 'jazzy'])
+  assert.equal(hardest(words, 0.1).length, 3) // always at least three to choose from
 })

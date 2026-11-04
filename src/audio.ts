@@ -564,6 +564,14 @@ export class Sound {
     this.glass(r + 48, t + 0.05, 0.04, { dur: 2, rev: 0.9, echo: 0.3, scoop: false })
   }
 
+  // Rigged: a sly chromatic slide down, as your next word turns out to be someone else's choice.
+  rigged(pan: number) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime + 0.3
+    ;[76, 75, 74, 71].forEach((m, i) => this.glass(m, t + i * EIGHTH * 0.6, 0.06, { pan, dur: 1.6, rev: 0.8, echo: 0.3 }))
+    this.piano(ROOTS[this.root] + 13, t + EIGHTH * 2.4, 0.18, { decay: 2, bright: 0.4, rev: 0.6, echo: 0.2 }) // a wrong note, on purpose
+  }
+
   // Hot potato: a bouncy catch, or a pop and a fizz when it goes off.
   potato(boom: boolean, pan: number) {
     if (!this.ctx) return

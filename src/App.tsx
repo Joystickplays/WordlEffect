@@ -1,9 +1,9 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev } from './net.ts'
+import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Potato } from './net.ts'
 import { Setup, Panel, Which } from './Room.tsx'
 
 const ROWS = 6
@@ -13,6 +13,7 @@ const NAMES = { correct: 'right', present: 'elsewhere', absent: 'not in word' }
 const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px)` }))
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
 const pick = (lang: Lang) => WORDS[lang].answers[Math.floor(Math.random() * WORDS[lang].answers.length)]
+const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answers, 0.08) }
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
@@ -21,6 +22,7 @@ const freshMatch = () => ({
   score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[], claim: 0,
   said: [] as number[], jinxed: [] as string[], // this word's guess fingerprints, and jinxes already settled
   from: [] as string[], // who sent the locks waiting for us, oldest first
+  rig: null as { word: string; by: string } | null, // Rigged: the next word someone picked for us
   potato: { holder: '', gen: 0, fuse: 0 }, // Hot potato: who has it, which throw this is, and (if it's ours) when it goes off
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -83,6 +85,7 @@ export default function App() {
   const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
   const [squat, setSquat] = useState<Record<number, { ch: string; by: string }>>({}) // Squatter: letters stuck in the next row
   const [potato, setPotato] = useState('') // who is holding the hot potato
+  const [rig, setRig] = useState<{ to: string; words: string[]; until: number } | null>(null) // Rigged: our pick of their next word
   const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
   const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
 
@@ -172,6 +175,7 @@ export default function App() {
   function onKey(k: string) {
     if (snd.current.wake()) fx.current.wake()
     if (!woke) setWoke(true)
+    if (rig && /^[123]$/.test(k)) return rigWith(rig.words[+k - 1])
     if (phase === 'over') {
       if (k === 'enter' && !code) restart()
       else if (k === 'enter' && ended && host && roomRef.current) publish(seat({ ...roomRef.current, phase: 'lobby' }, peersRef.current))
@@ -421,7 +425,7 @@ export default function App() {
     const m = mp.current
     if (h === selfId && m.live && m.potato.holder && m.potato.holder !== selfId && !ids.includes(m.potato.holder)) {
       const holder = [selfId, ...ids].filter(id => id in m.seats)[Math.floor(Math.random() * (ids.length + 1))] ?? selfId
-      const e: Ev = { k: 'potato', to: holder, fuse: 20000 + Math.floor(Math.random() * 40000), gen: m.potato.gen + 1, boom: false }
+      const e: Potato = { k: 'potato', to: holder, fuse: 20000 + Math.floor(Math.random() * 40000), gen: m.potato.gen + 1, boom: false }
       net.current?.ev(e)
       catchPotato(e, '')
     }
@@ -444,6 +448,7 @@ export default function App() {
     restart()
     setLive(true)
     setPotato('')
+    setRig(null)
     setEnded(null)
     setPending(0)
     setPhase('busy')
@@ -473,7 +478,14 @@ export default function App() {
     m.locked = Math.min(m.carry, m.S.rows - 1 - dusk)
     m.sealed = dusk + m.locked
     setSealed(m.sealed)
-    restart(WORDS[m.S.lang].answers[m.order[m.n % m.order.length]], true)
+    const rigged = m.rig
+    m.rig = null
+    restart(rigged?.word ?? WORDS[m.S.lang].answers[m.order[m.n % m.order.length]], true)
+    if (rigged) {
+      flash(`${COLOURS[m.seats[rigged.by] ?? 0][0]} picked this word`)
+      snd.current.rigged(side(rigged.by))
+      fx.current.rigged(center(board.current), hueOf(rigged.by))
+    }
   }
 
   function advance(won: boolean) {
@@ -491,6 +503,37 @@ export default function App() {
     }
     m.n++
     nextWord()
+    offerRig()
+  }
+
+  // Rigged: after each of your words, if you're in last place, you choose the leader's next word from three nasty ones.
+  function offerRig() {
+    const m = mp.current, others = lit(), snaps = snapsRef.current
+    if (!has(m.S, 'rigged') || !others.length) return
+    const lead = target(others)!
+    if (lead.score <= m.score || others.some(p => p.score < m.score) || snaps[lead.id]?.rigged) return
+    const pool = NASTY[m.S.lang], words = new Set<string>()
+    while (words.size < 3) words.add(pool[Math.floor(Math.random() * pool.length)])
+    setRig({ to: lead.id, words: [...words], until: Date.now() + 10000 })
+  }
+
+  function rigWith(word: string) {
+    const r = rig
+    if (!r) return
+    setRig(null)
+    net.current?.ev({ k: 'rig', to: r.to, word })
+    const el = panelEls.current[r.to]
+    if (el) fx.current.stream(center(board.current), center(el), 275, 2)
+    snd.current.launch(side(r.to))
+    flash(`you rigged ${COLOURS[mp.current.seats[r.to] ?? 0][0]}'s next word`)
+  }
+
+  function gotRig(e: Extract<Ev, { k: 'rig' }>, from: string) {
+    const m = mp.current
+    if (e.to !== selfId || !m.live || !has(m.S, 'rigged') || m.rig || !WORDS[m.S.lang].answers.includes(e.word)) return
+    m.rig = { word: e.word, by: from }
+    flash(`${COLOURS[m.seats[from] ?? 0][0]} rigged your next word`)
+    net.current?.me(snapshot())
   }
 
   // Everyone still here who was dealt into this match, with their latest panel.
@@ -565,7 +608,7 @@ export default function App() {
       .map(id => ({ id, score: snaps[id].score }))
   }
 
-  function catchPotato(e: Ev, from: string) {
+  function catchPotato(e: Potato, from: string) {
     const m = mp.current, p = m.potato
     if (!m.live || !has(m.S, 'potato') || e.gen < p.gen || (e.gen === p.gen && p.holder && e.to >= p.holder)) return
     const a = from ? panelEls.current[from] : null, to = e.to === selfId ? board.current : panelEls.current[e.to]
@@ -588,7 +631,7 @@ export default function App() {
     const m = mp.current, others = lit()
     if (!others.length) return
     const to = boomed ? others[Math.floor(Math.random() * others.length)].id : target(others)!.id
-    const e: Ev = { k: 'potato', to, fuse: boomed ? 20000 + Math.floor(Math.random() * 40000) : Math.round(Math.max(1000, m.potato.fuse - performance.now())), gen: m.potato.gen + 1, boom: boomed }
+    const e: Potato = { k: 'potato', to, fuse: boomed ? 20000 + Math.floor(Math.random() * 40000) : Math.round(Math.max(1000, m.potato.fuse - performance.now())), gen: m.potato.gen + 1, boom: boomed }
     net.current?.ev(e)
     m.potato = { holder: to, gen: e.gen, fuse: 0 }
     setPotato(to)
@@ -677,6 +720,7 @@ export default function App() {
       score: Math.round(m.score), energy: Math.round(energy * 100) / 100, out: m.out, done: m.done, stars: m.stars.map(Math.round),
       said: m.live ? m.said : [],
       squat: Object.keys(squat).map(Number),
+      rigged: !!m.rig,
     }
   }
   const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
@@ -706,8 +750,14 @@ export default function App() {
   const onPeers = useEffectEvent(peersChanged)
   const onStale = useEffectEvent(() => setLine('refresh to play together'))
   const onMe = useEffectEvent(gotMe)
+  const rigLate = useEffectEvent(() => rig && rigWith(rig.words[Math.floor(Math.random() * 3)]))
+  useEffect(() => {
+    if (!rig) return
+    const id = setTimeout(() => rigLate(), rig.until - Date.now()) // too slow: one of the three, at random
+    return () => clearTimeout(id)
+  }, [rig])
   const onLock = useEffectEvent(gotLock)
-  const onEv = useEffectEvent((e: Ev, from: string) => e.k === 'potato' && catchPotato(e, from))
+  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'potato' ? catchPotato(e, from) : gotRig(e, from)))
   useEffect(() => {
     if (!code) return
     const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
@@ -766,7 +816,7 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if ((e.target as Element).closest?.('button') && (e.key === 'Enter' || e.key === ' ')) return // the focused button handles it
       const k = e.key === 'Enter' ? 'enter' : e.key === 'Backspace' ? 'back' : e.key.toLowerCase()
-      if (k === 'enter' || k === 'back' || /^[a-z]$/.test(k)) {
+      if (k === 'enter' || k === 'back' || /^[a-z1-3]$/.test(k)) {
         e.preventDefault()
         press(k)
       }
@@ -854,6 +904,20 @@ export default function App() {
             </li>
           ))}
         </ol>
+      )}
+      {rig && (
+        <div className="rig" style={{ '--h': hueOf(rig.to) } as CSSProperties}>
+          <small>pick {COLOURS[room?.seats[rig.to] ?? 0][0]}'s next word</small>
+          <div>
+            {rig.words.map((w, i) => (
+              <button key={w} onMouseDown={e => e.preventDefault()} onClick={() => rigWith(w)}>
+                <i>{i + 1}</i>
+                {w}
+              </button>
+            ))}
+          </div>
+          <span className="fuse" />
+        </div>
       )}
       {code && (
         <p className="line">

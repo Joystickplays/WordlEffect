@@ -19,10 +19,11 @@ export const COLOURS = [['rose', 340], ['gold', 45], ['fern', 100], ['mint', 150
 
 export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; round: number; seats: Record<string, number> }
 // One player's whole panel. Marks only ("ccpaa"), never letters.
-export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[] }
+export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean }
 export type Lock = { to: string; n: number }
 // Everything else players do to each other: throwing the hot potato, rigging a word, using a skill.
-export type Ev = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
+export type Potato = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
+export type Ev = Potato | { k: 'rig'; to: string; word: string }
 type Hello = { v: number; since: number }
 
 type Obj = Record<string, unknown>
@@ -42,10 +43,13 @@ const okMe = (m: unknown): m is Me =>
   int(m.pending, 0, 99) && num(m.score, 0, 1e9) && num(m.energy, 0, 1) && typeof m.out === 'boolean' && typeof m.done === 'boolean' &&
   Array.isArray(m.stars) && m.stars.length <= 5 && m.stars.every(t => num(t, 0, 1e8)) &&
   Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32)) &&
-  Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4))
+  Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4)) && typeof m.rigged === 'boolean'
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
 const id = (x: unknown) => typeof x === 'string' && x.length < 64
-const okEv = (e: unknown): e is Ev => obj(e) && e.k === 'potato' && id(e.to) && int(e.fuse, 0, 60000) && int(e.gen, 0, 1e6) && typeof e.boom === 'boolean'
+const okEv = (e: unknown): e is Ev =>
+  obj(e) && id(e.to) &&
+  ((e.k === 'potato' && int(e.fuse, 0, 60000) && int(e.gen, 0, 1e6) && typeof e.boom === 'boolean') ||
+    (e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)))
 
 export type Handlers = {
   room(r: Room): void
