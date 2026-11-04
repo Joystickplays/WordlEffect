@@ -235,7 +235,7 @@ export default function App() {
       snd.current.type(k)
       fx.current.type(tile(r, open[cur.length]))
       // a gentle push toward the letter, then straight back: left on the first, right on the last
-      const dx = (open[cur.length] - 2) * 3
+      const dx = (open[cur.length] - 2) * 1.5
       if (dx && !reduced) board.current.animate([{ translate: '0' }, { translate: `${dx}px`, offset: 0.25 }, { translate: '0' }], { duration: 420, easing: 'ease-out' })
       setCur(cur + k)
     }

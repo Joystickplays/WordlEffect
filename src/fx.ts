@@ -308,7 +308,7 @@ export class FX {
       // they circle the tile, then wander off along the row looking for their real seat
       // flung out of the letter, then caught in a circle, each at its own speed
       for (let i = 0; i < 34 * this.q; i++)
-        this.add({ x, y, life: rand(1.4, 2.4), rgb: AMBER, ...bit(0.9, 0.1, 2), align: true, orbit: { cx: x, cy: y, r: w * 0.15, a: rand(0, TAU), w: rand(1.2, 6) * pick([-1, 1]), grow: rand(140, 320), fling: 3.2 } })
+        this.add({ x, y, life: rand(1.4, 2.4), rgb: AMBER, ...bit(0.9, 0.1, 2), align: true, orbit: { cx: x, cy: y, r: w * 0.15, a: rand(0, TAU), w: rand(0.1, 0.5) * pick([-1, 1]), grow: rand(140, 320), fling: 3.2 } })
       for (let i = 0; i < 12 * this.q; i++)
         this.add({ x, y: y + rand(-w / 3, w / 3), vx: pick([-1, 1]) * rand(60, 220), vy: rand(-10, 10), drag: 0.975, life: rand(1, 1.8), rgb: AMBER, ...bit(0.8, 0, 1) })
       this.gift(x, y, AMBER, Math.round(3 * this.q))
