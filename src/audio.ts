@@ -528,6 +528,28 @@ export class Sound {
     this.at(t, () => this.setEnergy(0.25, 3))
   }
 
+  // ——— playing together ———
+
+  // The count-in: the Cmaj7 climbing, one note a beat.
+  count(t: number) {
+    if (!this.ctx) return
+    ARP.slice(0, 4).forEach((m, i) => this.piano(m, t + i * BEAT, 0.28 + i * 0.05, { decay: 3, rev: 0.6, echo: 0.25, pan: (i - 1.5) * 0.2 }))
+  }
+
+  // A friend finds a letter: that column's note, faint and far off, from their side of the screen.
+  far(col: number, pan: number) {
+    if (!this.ctx) return
+    this.glass(ARP[col] + 12, this.ctx.currentTime + rand(0, 0.04), 0.035, { pan, dur: 2.4, rev: 1, echo: 0.5, scoop: false })
+  }
+
+  // A friend's light going out: a soft falling pair.
+  fall(pan: number) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.piano(67, t, 0.14, { pan, decay: 3, rev: 0.7, echo: 0.3, bright: 0.6 })
+    this.piano(60, t + EIGHTH, 0.12, { pan, decay: 4, rev: 0.7, echo: 0.3, bright: 0.5 })
+  }
+
   reset() {
     if (!this.ctx) return
     Object.assign(this, { hold: false, streak: 0, flourish: 0, tension: 0 })

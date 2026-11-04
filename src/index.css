@@ -504,3 +504,112 @@ canvas.fx {
 .line span {
   color: hsl(var(--h) 80% 72% / 0.8);
 }
+
+.stage:has(.peers) {
+  grid-template-columns: 1fr auto auto auto 1fr;
+  max-width: 1440px;
+}
+.peers {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 20px 16px;
+  align-content: center;
+}
+.peers.left {
+  justify-content: end;
+}
+.peers.right {
+  justify-content: start;
+}
+.panel {
+  --h: 200;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 2s, filter 2s;
+}
+.panel.out {
+  opacity: 0.28;
+  filter: grayscale(1);
+}
+.mini {
+  display: grid;
+  grid-template-columns: repeat(5, 9px);
+  gap: 2px;
+  padding: 5px;
+  border-radius: 5px;
+  border: 1px solid hsl(var(--h) 80% 70% / calc(0.14 + var(--pe) * 0.4));
+  box-shadow: 0 0 calc(4px + 22px * var(--pe)) hsl(var(--h) 90% 60% / calc(0.08 + var(--pe) * 0.4));
+  transition: box-shadow 1.2s, border-color 1.2s;
+}
+.mini i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  transition: background-color 0.4s, box-shadow 0.6s;
+}
+.mini i.typed {
+  background: rgb(255 255 255 / 0.22);
+}
+.mini i.correct {
+  border-color: transparent;
+  background: rgb(var(--g) / 0.85);
+  box-shadow: 0 0 5px rgb(var(--g) / 0.8);
+}
+.mini i.present {
+  border-color: transparent;
+  background: rgb(var(--a) / 0.75);
+  box-shadow: 0 0 4px rgb(var(--a) / 0.6);
+}
+.mini i.absent {
+  background: rgb(255 255 255 / 0.04);
+}
+.mini i.sealed {
+  border-color: rgb(195 220 255 / 0.25);
+  background: rgb(195 220 255 / 0.14);
+}
+.panel figcaption {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: hsl(var(--h) 70% 75% / 0.65);
+}
+.panel .stars {
+  color: hsl(var(--h) 90% 80%);
+  text-shadow: 0 0 6px hsl(var(--h) 90% 60%);
+}
+
+@media (max-width: 640px) {
+  .app.together {
+    --chrome: 400px;
+  }
+  .stage:has(.peers) {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: 'pl pr' 'l r' 'b b';
+  }
+  .peers {
+    display: flex;
+    gap: 8px;
+  }
+  .peers.left {
+    grid-area: pl;
+  }
+  .peers.right {
+    grid-area: pr;
+  }
+  .mini {
+    grid-template-columns: repeat(5, 5px);
+    gap: 1px;
+    padding: 3px;
+  }
+  .mini i {
+    width: 5px;
+    height: 5px;
+    border-radius: 1px;
+  }
+  .panel figcaption {
+    font-size: 8px;
+  }
+}

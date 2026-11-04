@@ -384,6 +384,11 @@ export class FX {
     for (let i = 0; i < 260 * k * this.q; i++) this.gift(b.x + rand(-b.rx, b.rx), b.y + rand(-b.ry, b.ry), hsl(rand(0, 360), 0.9, 0.68), 1)
   }
 
+  // A light going out: embers drifting up from someone's panel.
+  ember({ x, y }: Pt, hue: number) {
+    this.burst(x, y, 40, { col: () => hsl(hue + rand(-15, 15), 0.6, 0.6), speed: [10, 60], life: [1.5, 3], scale: 0.7, drag: 0.97, grav: -25, sparks: 0.3, hot: 1.2 })
+  }
+
   snow() {
     this.poke(-0.04, 0)
     this.mood = 'cold'

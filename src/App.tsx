@@ -1,10 +1,10 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { ANSWERS, VALID } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, type Net, type Room } from './net.ts'
-import { Setup } from './Room.tsx'
+import { connect, selfId, COLOURS, DEFAULTS, type Net, type Room, type Me } from './net.ts'
+import { Setup, Panel } from './Room.tsx'
 
 const ROWS = 6
 const COLS = 5
@@ -14,6 +14,11 @@ const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
 const pick = () => ANSWERS[Math.floor(Math.random() * ANSWERS.length)]
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
+// One match, kept in a ref: scheduled reveals read it long after the render that started them.
+const freshMatch = () => ({
+  live: false, round: 0, S: DEFAULTS, seats: {} as Record<string, number>, order: [] as number[], n: 0, start: 0,
+  score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[],
+})
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
 // Numbers roll up to their new value instead of jumping.
@@ -67,32 +72,42 @@ export default function App() {
   const [peers, setPeers] = useState<string[]>([])
   const [host, setHost] = useState(true)
   const [line, setLine] = useState('') // the one quiet line of text under the board
+  const [live, setLive] = useState(false) // a match is being played
+  const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
   const fx = useRef<FX>(null!), snd = useRef<Sound>(null!), stats = useRef(fresh())
   const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([])
+  const mp = useRef(freshMatch()), snapsRef = useRef<Record<string, Me>>({}), panelEls = useRef<Record<string, HTMLElement | null>>({})
   const limit = room ? room.settings.rows : ROWS
-  const lobby = !!code
+  const lobby = !!code && !live
   const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
+  const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => room.seats[a] - room.seats[b]) : []
+  const side = (id: string) => (others.indexOf(id) % 2 ? 0.6 : -0.6) // panels alternate left and right
+  const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
 
   useEffect(() => {
     const f = (fx.current = new FX(canvas.current))
     const s = (snd.current = new Sound())
     s.onEvent = (type, data) => f[type](data) // the music drives the light: heartbeat, glints, chord colours
-    const place = () => {
-      f.setBoard(board.current.getBoundingClientRect())
-      const cs = getComputedStyle(tileEls.current[0])
-      f.letters(parseFloat(cs.fontSize), cs.fontFamily, cs.fontWeight)
-    }
-    place()
-    addEventListener('resize', place)
+    const fit = () => place()
+    fit()
+    addEventListener('resize', fit)
     return () => {
-      removeEventListener('resize', place)
+      removeEventListener('resize', fit)
       f.destroy()
       s.destroy()
     }
   }, [])
+
+  // The light needs to know where the board is, and how big its letters are.
+  const place = useEffectEvent(() => {
+    fx.current.setBoard(board.current.getBoundingClientRect())
+    const cs = getComputedStyle(tileEls.current[0])
+    fx.current.letters(parseFloat(cs.fontSize), cs.fontFamily, cs.fontWeight)
+  })
+  useEffect(() => place(), [limit, code, others.length])
 
   const center = (el: Element) => {
     const r = el.getBoundingClientRect()
@@ -113,6 +128,7 @@ export default function App() {
   }, [clock.start, clock.end])
 
   const earn = (n: number) => {
+    if (mp.current.live) mp.current.score += n
     setPoints(p => p + n)
     setTotal(p => p + n)
   }
@@ -126,7 +142,7 @@ export default function App() {
   function onKey(k: string) {
     if (snd.current.wake()) fx.current.wake()
     if (!woke) setWoke(true)
-    if (phase === 'over') return k === 'enter' && restart()
+    if (phase === 'over') return k === 'enter' && !code && restart()
     if (phase !== 'play') return
     // oxlint-disable-next-line react/purity -- onKey only ever runs from input events, never during render
     if (!clock.start && !code) setClock({ start: Date.now(), end: 0, now: Date.now() })
@@ -196,8 +212,9 @@ export default function App() {
   }
 
   function finish(res: 'won' | 'lost', r: number) {
+    const m = mp.current
     setResult(res)
-    setClock(c => ({ ...c, end: Date.now() }))
+    if (!m.live) setClock(c => ({ ...c, end: Date.now() }))
     const t = snd.current.grid(BEAT)
     if (res === 'won') {
       earn(winBonus(r + 1))
@@ -210,7 +227,7 @@ export default function App() {
         setEnergy(1)
         say('Solved')
       })
-      snd.current.at(t + BAR, () => setPhase('over'))
+      snd.current.at(t + BAR, () => (m.live ? advance(true) : setPhase('over')))
     } else {
       snd.current.lose(t, answer)
       fx.current.snow()
@@ -221,17 +238,19 @@ export default function App() {
         }),
       )
       snd.current.at(t + BAR * 1.5, () => {
-        setPhase('over')
         say(`The word was ${answer}`)
+        if (m.live) advance(false)
+        else setPhase('over')
       })
     }
   }
 
-  function restart() {
+  // A fresh board. In a match the streak, score and clock carry on to the next word.
+  function restart(word = pick(), keep = false) {
     fx.current.reset()
     snd.current.reset()
-    stats.current = fresh()
-    setAnswer(pick())
+    stats.current = { ...fresh(), streak: keep ? stats.current.streak : 0 }
+    setAnswer(word)
     setRows([])
     setCur('')
     setShown(COLS)
@@ -239,12 +258,18 @@ export default function App() {
     setResult(null)
     setKeys({})
     setGhost(0)
-    setEnergy(0)
-    setStreak(0)
+    setStreak(stats.current.streak)
     setPoints(0)
-    setClock({ start: 0, end: 0, now: 0 })
     setFlare(false)
-    setSealed(0)
+    if (keep) {
+      fx.current.setStreak(stats.current.streak)
+      snd.current.setStreak(stats.current.streak)
+      charge(energyOf(stats.current))
+    } else {
+      setEnergy(0)
+      setClock({ start: 0, end: 0, now: 0 })
+      setSealed(0)
+    }
   }
 
   // ——— playing together ———
@@ -268,6 +293,10 @@ export default function App() {
   }
 
   function leave() {
+    mp.current = freshMatch()
+    setLive(false)
+    snapsRef.current = {}
+    setSnaps({})
     setCode(null)
     roomRef.current = null
     setRoom(null)
@@ -283,6 +312,9 @@ export default function App() {
     roomRef.current = r
     setRoom(r)
     for (const id in r.seats) if (id !== selfId && !(prev && id in prev.seats)) say(`${COLOURS[r.seats[id]][0]} is here`)
+    const m = mp.current
+    if (r.phase === 'play' && selfId in r.seats && r.round !== m.round) begin(r)
+    else if (r.phase === 'lobby' && m.live) backToLobby()
     if (selfId in r.seats) setLine(l => (l.startsWith('this room') || l.startsWith("they're") ? '' : l))
     else setLine(r.phase === 'play' ? "they're mid-match, you'll join the next one" : Object.keys(r.seats).length >= r.settings.seats ? 'this room is full' : '')
   }
@@ -310,13 +342,83 @@ export default function App() {
     setPeers(ids)
     setHost(h === selfId)
     if (h === selfId && r) publish(r.phase === 'lobby' ? seat(r, ids) : r)
+    net.current?.me(snapshot()) // newcomers need to see us too
   }
 
   function lobbyEnter() {
+    const r = roomRef.current
     if (cur.length === COLS) {
       if (!VALID.has(cur)) return refuse('Not in word list')
       if (cur !== code) goTo(cur, true)
       else setCur('')
+    } else if (!cur && host && r && seated >= 2) publish({ ...seat(r, peersRef.current), phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32) })
+  }
+
+  // The host said go: a four-beat count-in on the Cmaj7, then everyone's first word.
+  function begin(r: Room) {
+    const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, ANSWERS.length) })
+    restart()
+    setLive(true)
+    setPhase('busy')
+    setTotal(0)
+    setLine('')
+    const t = snd.current.grid(BEAT)
+    snd.current.count(t)
+    for (let i = 0; i < 4; i++) snd.current.at(t + i * BEAT, () => fx.current.poke(0.03 + i * 0.01, 0.4))
+    snd.current.at(t + 4 * BEAT, () => {
+      if (mp.current !== m) return // left, or a new match began
+      m.start = performance.now()
+      setClock({ start: Date.now(), end: 0, now: Date.now() })
+      nextWord()
+    })
+  }
+
+  function nextWord() {
+    const m = mp.current
+    m.sealed = 0
+    setSealed(0)
+    restart(ANSWERS[m.order[m.n % m.order.length]], true)
+  }
+
+  function advance(won: boolean) {
+    const m = mp.current
+    if (!m.live) return
+    void won
+    m.n++
+    nextWord()
+  }
+
+  function backToLobby() {
+    mp.current = freshMatch()
+    setLive(false)
+    restart()
+    if (code) setRows([{ word: code, marks: Array(COLS).fill('correct') }])
+  }
+
+  // Everyone's panel, as they see it: marks only, never letters.
+  const snapshot = (): Me => {
+    const m = mp.current
+    return {
+      round: m.round, n: m.n, typed: m.live && phase === 'play' ? cur.length : 0, sealed: m.live ? m.sealed : 0, pending: m.pending,
+      rows: m.live ? rows.map((row, i) => (i === rows.length - 1 ? row.marks.slice(0, shown) : row.marks).map(x => x[0]).join('')) : [],
+      score: Math.round(m.score), energy: Math.round(energy * 100) / 100, out: m.out, done: m.done, stars: m.stars.map(Math.round),
+    }
+  }
+  const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
+  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, energy, live, total])
+
+  // Someone's panel changed. Their new greens sound faintly from their side of the screen.
+  function gotMe(m: Me, id: string) {
+    const prev = snapsRef.current[id], pan = side(id), el = panelEls.current[id]
+    snapsRef.current = { ...snapsRef.current, [id]: m }
+    setSnaps(snapsRef.current)
+    if (!prev || prev.round !== m.round || prev.n !== m.n) return
+    const r = m.rows.length - 1, was = prev.rows[r] ?? ''
+    for (let c = was.length; c < (m.rows[r]?.length ?? 0); c++) if (m.rows[r][c] === 'c') snd.current.far(c, pan)
+    if (!prev.out && m.out) {
+      snd.current.fall(pan)
+      if (el) fx.current.ember(center(el), hueOf(id))
+      say(`${COLOURS[roomRef.current?.seats[id] ?? 0][0]}'s light rests`)
     }
   }
 
@@ -325,9 +427,10 @@ export default function App() {
   const onRoom = useEffectEvent((r: Room) => applyRoom(r))
   const onPeers = useEffectEvent(peersChanged)
   const onStale = useEffectEvent(() => setLine('refresh to play together'))
+  const onMe = useEffectEvent(gotMe)
   useEffect(() => {
     if (!code) return
-    const c = (net.current = connect(code, { room: r => onRoom(r), me: () => {}, lock: () => {}, peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
+    const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: () => {}, peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
     return () => {
       c.leave()
       net.current = null
@@ -364,9 +467,18 @@ export default function App() {
     return () => removeEventListener('keydown', h)
   }, [])
 
+  const panels = (ids: string[], where: string) => (
+    <div className={`peers ${where}`}>
+      {ids.map(id => (
+        <Panel key={id} seat={room!.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} el={e => { panelEls.current[id] = e }} />
+      ))}
+    </div>
+  )
+
   return (
     <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
       <div className="stage">
+      {code && room && panels(others.filter((_, i) => i % 2 === 0), 'left')}
       <aside className="hud left">
         {lobby && room ? <Setup side="left" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Guess</small><b>{rows.length}<i>/{limit}</i></b></p>
@@ -399,6 +511,7 @@ export default function App() {
         <p><small>Total</small><b><Tally value={total} /></b></p>
         </>}
       </aside>
+      {code && room && panels(others.filter((_, i) => i % 2 === 1), 'right')}
       </div>
 
       <div className="ghost" aria-hidden="true">
