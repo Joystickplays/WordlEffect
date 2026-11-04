@@ -3,6 +3,8 @@ import { ANSWERS, VALID } from './words.ts'
 import { score, chains, energyOf, tensionOf, best, points, winBonus, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
+import { connect, selfId, COLOURS, DEFAULTS, type Net, type Room } from './net.ts'
+import { Setup } from './Room.tsx'
 
 const ROWS = 6
 const COLS = 5
@@ -59,11 +61,20 @@ export default function App() {
   const [clock, setClock] = useState({ start: 0, end: 0, now: 0 })
   const [flare, setFlare] = useState(false) // the winning row's letters flaring HDR-white
   const [sealed, setSealed] = useState(0) // rows frozen shut at the bottom of the board
+  // playing together
+  const [code, setCode] = useState<string | null>(null) // the room's word
+  const [room, setRoom] = useState<Room | null>(null)
+  const [peers, setPeers] = useState<string[]>([])
+  const [host, setHost] = useState(true)
+  const [line, setLine] = useState('') // the one quiet line of text under the board
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
   const fx = useRef<FX>(null!), snd = useRef<Sound>(null!), stats = useRef(fresh())
-  const limit = ROWS
+  const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([])
+  const limit = room ? room.settings.rows : ROWS
+  const lobby = !!code
+  const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
 
   useEffect(() => {
     const f = (fx.current = new FX(canvas.current))
@@ -118,9 +129,9 @@ export default function App() {
     if (phase === 'over') return k === 'enter' && restart()
     if (phase !== 'play') return
     // oxlint-disable-next-line react/purity -- onKey only ever runs from input events, never during render
-    if (!clock.start) setClock({ start: Date.now(), end: 0, now: Date.now() })
+    if (!clock.start && !code) setClock({ start: Date.now(), end: 0, now: Date.now() })
     const r = rows.length
-    if (k === 'enter') return submit()
+    if (k === 'enter') return lobby ? lobbyEnter() : submit()
     if (k === 'back') {
       if (!cur) return
       snd.current.erase(cur[cur.length - 1])
@@ -133,14 +144,15 @@ export default function App() {
     }
   }
 
+  function refuse(why: string) {
+    snd.current.invalid()
+    fx.current.nope()
+    if (!reduced) rowEls.current[rows.length].animate(SHAKE, { duration: 420, easing: 'ease-out' })
+    say(why)
+  }
+
   function submit() {
-    if (cur.length < COLS || !VALID.has(cur)) {
-      snd.current.invalid()
-      fx.current.nope()
-      if (!reduced) rowEls.current[rows.length].animate(SHAKE, { duration: 420, easing: 'ease-out' })
-      say(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
-      return
-    }
+    if (cur.length < COLS || !VALID.has(cur)) return refuse(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
     const r = rows.length, word = cur, marks = score(word, answer), s = stats.current
     const chain = chains(marks), isNew = marks.map((m, i) => m === 'correct' && !s.greens.has(i))
     s.guesses++
@@ -235,6 +247,108 @@ export default function App() {
     setSealed(0)
   }
 
+  // ——— playing together ———
+
+  const flash = (s: string) => {
+    setLine(s)
+    setTimeout(() => setLine(l => (l === s ? '' : l)), 2500)
+  }
+
+  function goTo(word: string, joined = false) {
+    restart()
+    setCode(word)
+    history.replaceState(null, '', `#${word}`)
+    peersRef.current = []
+    setPeers([])
+    setHost(true)
+    applyRoom({ settings: roomRef.current?.settings ?? DEFAULTS, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 } })
+    setRows([{ word, marks: Array(COLS).fill('correct') }]) // the room's word, lit, on the first row
+    setLine('')
+    if (joined) setTimeout(() => !peersRef.current.length && location.hash === `#${word}` && setLine('still looking for them'), 20000)
+  }
+
+  function leave() {
+    setCode(null)
+    roomRef.current = null
+    setRoom(null)
+    peersRef.current = []
+    setPeers([])
+    setLine('')
+    history.replaceState(null, '', location.pathname + location.search)
+    restart()
+  }
+
+  function applyRoom(r: Room) {
+    const prev = roomRef.current
+    roomRef.current = r
+    setRoom(r)
+    for (const id in r.seats) if (id !== selfId && !(prev && id in prev.seats)) say(`${COLOURS[r.seats[id]][0]} is here`)
+    if (selfId in r.seats) setLine(l => (l.startsWith('this room') || l.startsWith("they're") ? '' : l))
+    else setLine(r.phase === 'play' ? "they're mid-match, you'll join the next one" : Object.keys(r.seats).length >= r.settings.seats ? 'this room is full' : '')
+  }
+
+  // The host's word on the room goes to everyone.
+  function publish(r: Room) {
+    applyRoom(r)
+    net.current?.room(r)
+  }
+
+  // Everyone here keeps their colour; newcomers take the first free one while seats last.
+  function seat(r: Room, ids: string[]): Room {
+    const seats: Record<string, number> = {}
+    for (const id of [selfId, ...ids]) if (id in r.seats) seats[id] = r.seats[id]
+    for (const id of [selfId, ...ids])
+      if (!(id in seats) && Object.keys(seats).length < r.settings.seats) seats[id] = COLOURS.findIndex((_, i) => !Object.values(seats).includes(i))
+    return { ...r, seats }
+  }
+
+  function peersChanged(ids: string[], h: string) {
+    const r = roomRef.current
+    for (const id of peersRef.current) if (!ids.includes(id) && r && id in r.seats) say(`${COLOURS[r.seats[id]][0]} drifted away`)
+    if (ids.length) setLine(l => (l === 'still looking for them' ? '' : l))
+    peersRef.current = ids
+    setPeers(ids)
+    setHost(h === selfId)
+    if (h === selfId && r) publish(r.phase === 'lobby' ? seat(r, ids) : r)
+  }
+
+  function lobbyEnter() {
+    if (cur.length === COLS) {
+      if (!VALID.has(cur)) return refuse('Not in word list')
+      if (cur !== code) goTo(cur, true)
+      else setCur('')
+    }
+  }
+
+  const share = () => navigator.clipboard?.writeText(location.href).then(() => flash('link copied'), () => {})
+
+  const onRoom = useEffectEvent((r: Room) => applyRoom(r))
+  const onPeers = useEffectEvent(peersChanged)
+  const onStale = useEffectEvent(() => setLine('refresh to play together'))
+  useEffect(() => {
+    if (!code) return
+    const c = (net.current = connect(code, { room: r => onRoom(r), me: () => {}, lock: () => {}, peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
+    return () => {
+      c.leave()
+      net.current = null
+    }
+  }, [code])
+
+  // A #word link goes straight into that room.
+  const follow = useEffectEvent(() => {
+    const w = location.hash.slice(1).toLowerCase()
+    if (w && w !== code && VALID.has(w)) goTo(w, true)
+    else if (!w && code) leave()
+  })
+  useEffect(() => {
+    const h = () => follow(), id = setTimeout(h) // after the light and sound exist
+    addEventListener('hashchange', h)
+    return () => {
+      clearTimeout(id)
+      removeEventListener('hashchange', h)
+    }
+  }, [])
+
   const press = useEffectEvent(onKey)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -251,12 +365,14 @@ export default function App() {
   }, [])
 
   return (
-    <main className={`app ${woke ? 'awake' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
+    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
       <div className="stage">
       <aside className="hud left">
+        {lobby && room ? <Setup side="left" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Guess</small><b>{rows.length}<i>/{limit}</i></b></p>
         <p><small>Streak</small><b>{streak ? `×${streak}` : '–'}</b></p>
         <p><small>Light</small><Meter value={energy} /></p>
+        </>}
       </aside>
       <div className="board" ref={board} role="grid" aria-label="Guesses">
         {Array.from({ length: limit }, (_, r) => {
@@ -277,9 +393,11 @@ export default function App() {
         })}
       </div>
       <aside className="hud right">
+        {lobby && room ? <Setup side="right" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Time</small><b>{clockText(clock.start ? Math.max(0, Math.floor(((clock.end || clock.now) - clock.start) / 1000)) : 0)}</b></p>
         <p><small>Score</small><b><Tally value={scored} /></b></p>
         <p><small>Total</small><b><Tally value={total} /></b></p>
+        </>}
       </aside>
       </div>
 
@@ -292,6 +410,15 @@ export default function App() {
           ))}
       </div>
 
+      {code && (
+        <p className="line">
+          {line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
+          {lobby && room && selfId in room.seats && !line && (
+            <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
+          )}
+        </p>
+      )}
+
       <div className="keys">
         {KEYS.map((line, i) => (
           <div className="krow" key={i}>
@@ -301,7 +428,7 @@ export default function App() {
                 <button
                   key={k}
                   aria-label={k === 'enter' ? 'Enter' : k === 'back' ? 'Delete' : k}
-                  className={`key ${keys[k] || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && phase === 'over' ? 'beckon' : ''}`}
+                  className={`key ${keys[k] || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : phase === 'over') ? 'beckon' : ''}`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => onKey(k)}
                 >
@@ -325,6 +452,17 @@ export default function App() {
           </svg>
         </button>
       )}
+      <button
+        className="corner together"
+        aria-label={code ? 'Play alone' : 'Play together'}
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => (code ? leave() : goTo(pick()))}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="1.5" y="5.5" width="9" height="9" rx="1.5" />
+          <path d="M5.5 5.5v-2a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+        </svg>
+      </button>
       <a className="corner repo" href="https://github.com/Joystickplays/WordlEffect" target="_blank" rel="noopener noreferrer" aria-label="Source code on GitHub">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />

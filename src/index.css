@@ -440,10 +440,67 @@ canvas.fx {
 .full {
   left: 14px;
 }
+.together {
+  left: 42px;
+}
+.together svg,
 .full svg {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* ——— playing together ——— */
+.app.together .hud {
+  opacity: 1; /* the room's settings show from the start */
+}
+.cycle {
+  all: unset;
+  cursor: pointer;
+  transition: text-shadow 0.4s;
+}
+.cycle:hover,
+.cycle:focus-visible {
+  text-shadow: 0 0 14px rgb(160 200 255 / 0.9);
+}
+.trials {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.hud.left .trials {
+  align-items: flex-end;
+}
+.trials button {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  color: rgb(235 242 255 / 0.25);
+  transition: color 0.4s, text-shadow 0.4s;
+}
+.trials button:disabled {
+  cursor: default;
+}
+.trials button.on {
+  color: rgb(235 242 255 / 0.95);
+  text-shadow: 0 0 10px rgb(140 180 255 / 0.6);
+}
+.line {
+  margin: 0;
+  min-height: 16px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: rgb(205 220 255 / 0.5);
+}
+.line button {
+  all: unset;
+  cursor: pointer;
+}
+.line button:hover {
+  color: rgb(235 242 255 / 0.9);
+}
+.line span {
+  color: hsl(var(--h) 80% 72% / 0.8);
 }
