@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock } from './net.ts'
@@ -20,6 +20,7 @@ const freshMatch = () => ({
   live: false, round: 0, S: DEFAULTS, seats: {} as Record<string, number>, order: [] as number[], n: 0, start: 0,
   score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[], claim: 0,
   said: [] as number[], jinxed: [] as string[], // this word's guess fingerprints, and jinxes already settled
+  from: [] as string[], // who sent the locks waiting for us, oldest first
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
@@ -79,6 +80,7 @@ export default function App() {
   const [live, setLive] = useState(false) // a match is being played
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
   const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
+  const [squat, setSquat] = useState<Record<number, { ch: string; by: string }>>({}) // Squatter: letters stuck in the next row
   const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
   const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
 
@@ -175,16 +177,16 @@ export default function App() {
     if (phase !== 'play') return
     // oxlint-disable-next-line react/purity -- onKey only ever runs from input events, never during render
     if (!clock.start && !code) setClock({ start: Date.now(), end: 0, now: Date.now() })
-    const r = rows.length
+    const r = rows.length, open = [0, 1, 2, 3, 4].filter(i => !(i in squat)) // squatted boxes are skipped
     if (k === 'enter') return lobby ? lobbyEnter() : submit()
     if (k === 'back') {
       if (!cur) return
       snd.current.erase(cur[cur.length - 1])
-      fx.current.erase(tile(r, cur.length - 1))
+      fx.current.erase(tile(r, open[cur.length - 1]))
       setCur(cur.slice(0, -1))
-    } else if (/^[a-z]$/.test(k) && cur.length < COLS) {
+    } else if (/^[a-z]$/.test(k) && cur.length < open.length) {
       snd.current.type(k)
-      fx.current.type(tile(r, cur.length))
+      fx.current.type(tile(r, open[cur.length]))
       setCur(cur + k)
     }
   }
@@ -197,13 +199,15 @@ export default function App() {
   }
 
   function submit() {
-    if (cur.length < COLS || !WORDS[mp.current.live ? mp.current.S.lang : lang].valid.has(cur)) return refuse(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
-    if (trial('strict') && strictBreak(cur, rows)) {
+    const word = compose(cur, Object.fromEntries(Object.entries(squat).map(([i, q]) => [i, q.ch])))
+    if (word.length < COLS || !WORDS[mp.current.live ? mp.current.S.lang : lang].valid.has(word)) return refuse(word.length < COLS ? 'Not enough letters' : 'Not in word list')
+    if (trial('strict') && strictBreak(word, rows)) {
       refuse('Keep the letters you found')
       return flash('keep the light you found')
     }
     setLate(false)
-    const r = rows.length, word = cur, marks = score(word, answer), s = stats.current, m = mp.current
+    setSquat({})
+    const r = rows.length, marks = score(word, answer), s = stats.current, m = mp.current
     if (m.live) {
       const h = hash(`${m.round}:${m.n}:${word}`)
       m.said = [...m.said, h]
@@ -246,9 +250,11 @@ export default function App() {
       const t = trade(Math.min(6, locksFor(s.streak, extended, won, r + 1) * m.S.locks), m.pending)
       m.pending = t.pending
       if (t.sent) fire(t.sent)
-      if (!won) {
+      if (!won && has(m.S, 'squatter')) squatters(r + 1, marks, word)
+      else if (!won) {
         const l = land(m.pending, rowsAll - m.sealed - (r + 1), has(m.S, 'frost'))
         m.pending = l.pending
+        m.from = m.from.slice(-m.pending)
         if (l.now) seal(l.now, true)
       }
       setPending(m.pending)
@@ -322,6 +328,7 @@ export default function App() {
     setFlare(false)
     setFaded(0)
     setLate(false)
+    setSquat({})
     if (keep) {
       fx.current.setStreak(stats.current.streak)
       snd.current.setStreak(stats.current.streak)
@@ -531,6 +538,25 @@ export default function App() {
     snd.current.seal()
   }
 
+  // Squatter: waiting locks drop letters into the next row (two at most) instead of freezing rows. The rest wait.
+  function squatters(r: number, marks: Mark[], word: string) {
+    const m = mp.current
+    if (r >= m.S.rows - m.sealed || !m.pending) return
+    const greens: Record<number, string> = {}, ambers: string[] = [], next: Record<number, { ch: string; by: string }> = {}
+    rows.forEach(row => row.marks.forEach((x, i) => (x === 'correct' ? (greens[i] = row.word[i]) : x === 'present' && ambers.push(row.word[i]))))
+    marks.forEach((x, i) => (x === 'correct' ? (greens[i] = word[i]) : x === 'present' && ambers.push(word[i])))
+    for (let k = 0; k < 2 && m.pending; k++) {
+      const q = squatLetter(WORDS[m.S.lang].valid, greens, ambers, Object.fromEntries(Object.entries(next).map(([i, v]) => [i, v.ch])))
+      if (!q) break
+      const by = m.from.shift() ?? selfId
+      next[q.pos] = { ch: q.ch, by }
+      m.pending--
+      fx.current.squat(tile(r, q.pos), q.ch, hueOf(by))
+    }
+    if (Object.keys(next).length) snd.current.squat()
+    setSquat(next)
+  }
+
   // Jinx: you and someone else guessed the same word on the same word number. You both lose a row.
   function jinx(id: string, h: number, used: number) {
     const m = mp.current, key = `${id}:${h}`, el = panelEls.current[id]
@@ -565,6 +591,7 @@ export default function App() {
       if (a) fx.current.stream(center(a), center(board.current), hueOf(from), l.n)
       if (m.live && !m.out && !m.done && !m.ended) {
         m.pending = Math.min(99, m.pending + l.n)
+        m.from = [...m.from, ...Array(l.n).fill(from)]
         setPending(m.pending)
         snd.current.cold(side(from))
       }
@@ -582,10 +609,11 @@ export default function App() {
       rows: m.live ? rows.map((row, i) => (i === rows.length - 1 ? row.marks.slice(0, shown) : row.marks).map(x => x[0]).join('')) : [],
       score: Math.round(m.score), energy: Math.round(energy * 100) / 100, out: m.out, done: m.done, stars: m.stars.map(Math.round),
       said: m.live ? m.said : [],
+      squat: Object.keys(squat).map(Number),
     }
   }
   const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
-  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, pending, energy, live, total])
+  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, pending, energy, live, total, squat])
 
   // Someone's panel changed. Their new greens sound faintly from their side of the screen.
   function gotMe(m: Me, id: string) {
@@ -698,16 +726,18 @@ export default function App() {
           </div>
         )}
         {Array.from({ length: limit }, (_, r) => {
-          const row = rows[r], word = row ? row.word : r === rows.length ? cur : ''
+          const row = rows[r], now = r === rows.length && !lobby, word = row ? row.word : now ? compose(cur, Object.fromEntries(Object.entries(squat).map(([i, q]) => [i, q.ch]))).padEnd(COLS) : r === rows.length ? cur : ''
+          const open = [0, 1, 2, 3, 4].filter(i => !(now && i in squat))
           return (
             <div key={r} role="row" ref={el => { rowEls.current[r] = el! }} className={`row ${result === 'won' && r !== rows.length - 1 ? 'dim' : ''} ${flare && r === rows.length - 1 ? 'flare' : ''} ${r >= limit - sealed ? 'sealed' : ''}`}>
               {Array.from({ length: COLS }, (_, c) => {
                 const mark = row && (r < rows.length - 1 || c < shown) ? row.marks[c] : ''
                 const drain = trial('fading') && r < faded
-                const caret = phase === 'play' && r === rows.length && c === cur.length
+                const caret = phase === 'play' && r === rows.length && c === open[cur.length]
+                const sq = now ? squat[c] : undefined
                 return (
-                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c] ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''} ${drain ? 'drain' : ''}`}>
-                    {word[c] && <span key={word[c]}>{word[c]}</span>}
+                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c]?.trim() ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''} ${drain ? 'drain' : ''} ${sq ? 'squat' : ''}`} style={sq ? ({ '--h': hueOf(sq.by) } as CSSProperties) : undefined}>
+                    {word[c]?.trim() && <span key={word[c]}>{word[c]}</span>}
                   </div>
                 )
               })}

@@ -19,7 +19,7 @@ export const COLOURS = [['rose', 340], ['gold', 45], ['fern', 100], ['mint', 150
 
 export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; round: number; seats: Record<string, number> }
 // One player's whole panel. Marks only ("ccpaa"), never letters.
-export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[] }
+export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[] }
 export type Lock = { to: string; n: number }
 type Hello = { v: number; since: number }
 
@@ -39,7 +39,8 @@ const okMe = (m: unknown): m is Me =>
   m.rows.every(r => typeof r === 'string' && /^[cpa]{0,5}$/.test(r)) && int(m.typed, 0, 5) && int(m.sealed, 0, 8) &&
   int(m.pending, 0, 99) && num(m.score, 0, 1e9) && num(m.energy, 0, 1) && typeof m.out === 'boolean' && typeof m.done === 'boolean' &&
   Array.isArray(m.stars) && m.stars.length <= 5 && m.stars.every(t => num(t, 0, 1e8)) &&
-  Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32))
+  Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32)) &&
+  Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4))
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
 
 export type Handlers = {

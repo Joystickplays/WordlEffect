@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose } from './game.ts'
 
 test('score handles exact, misplaced and duplicate letters', () => {
   assert.deepEqual(score('crane', 'crane'), Array(5).fill('correct'))
@@ -102,4 +102,16 @@ test('jinx fingerprints match only the same guess on the same word', () => {
   assert.notEqual(hash('1:3:crane'), hash('1:4:crane'))
   assert.notEqual(hash('1:3:crane'), hash('1:3:crate'))
   assert.ok(hash('x') >= 0 && hash('x') < 2 ** 32)
+})
+
+test('squatters always leave the row solvable', () => {
+  const valid = ['crane', 'crate', 'trace', 'zebra']
+  for (let i = 0; i < 50; i++) {
+    const q = squatLetter(valid, { 0: 'c' }, ['t'], {})!
+    assert.notEqual(q.pos, 0)
+    assert.ok(valid.some(w => w[0] === 'c' && w.includes('t') && w[q.pos] === q.ch))
+  }
+  assert.equal(squatLetter(valid, { 0: 'q' }, [], {}), null)
+  assert.equal(compose('cne', { 1: 'r', 2: 'a' }), 'crane')
+  assert.equal(compose('c', { 1: 'r' }), 'cr')
 })

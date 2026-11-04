@@ -107,3 +107,20 @@ export function hash(s: string) {
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193)
   return h >>> 0
 }
+
+// Squatter: a letter dropped into a free box of the next row. It is taken from a real word that still fits what
+// you've found (greens in place, every amber somewhere) and any squatters already there, so the row stays solvable.
+export function squatLetter(valid: Iterable<string>, greens: Record<number, string>, ambers: string[], squat: Record<number, string>, rand = Math.random) {
+  const fixed = { ...greens, ...squat }, open = [0, 1, 2, 3, 4].filter(i => !(i in fixed))
+  if (!open.length) return null
+  const fits = [...valid].filter(w => Object.entries(fixed).every(([i, ch]) => w[+i] === ch) && ambers.every(ch => w.includes(ch)))
+  if (!fits.length) return null
+  const w = fits[Math.floor(rand() * fits.length)], pos = open[Math.floor(rand() * open.length)]
+  return { pos, ch: w[pos] }
+}
+
+// The typed letters flow into the boxes a squatter left free.
+export function compose(typed: string, squat: Record<number, string>) {
+  let k = 0
+  return Array.from({ length: 5 }, (_, i) => squat[i] ?? typed[k++] ?? '').join('')
+}

@@ -392,6 +392,20 @@ export class FX {
     setTimeout(() => this.burst(b.x, b.y, 16 * n, { col: ICE, speed: [30, 160], life: [0.6, 1.4], scale: 0.8, sparks: 0.1, hot: 2 }), 1000)
   }
 
+  // Squatter: a letter slams into a box from above, stamped in the sender's colour.
+  squat(t: Tile, ch: string, hue: number) {
+    const col = hsl(hue, 0.9, 0.7)
+    this.glyph(t, ch, 3, 0.9)
+    this.add({ x: t.x, y: t.y, life: 0.5, age: 0.125, size: t.w / 2, shape: BOX, aspect: 1, align: false, ang: 0, rgb: col, hot: 0.6 })
+    for (let i = 0; i < 26 * this.q; i++) {
+      const dx = rand(-1, 1) * t.w
+      this.add({ x: t.x + dx, y: t.y - t.w * 1.6, life: rand(0.18, 0.3), rgb: Math.random() < 0.7 ? col : WHITE, ...bit(0.9, 0.15, 2.2), align: true, path: [t.x + dx, t.y - t.w * 1.6, t.x + dx * 0.2, t.y] })
+    }
+    setTimeout(() => this.burst(t.x, t.y + t.w * 0.3, 18, { col, speed: [40, 180], life: [0.4, 0.9], scale: 0.8, grav: 120, sparks: 0.1 }), 250)
+    this.poke(0.02, 0.2)
+    this.rim.xv += 40
+  }
+
   // Jinx: both boards fire at each other and the sparks collide halfway.
   jinx(a: Pt, b: Pt, ha: number, hb: number) {
     this.stream(a, b, ha, 1)

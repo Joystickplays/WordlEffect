@@ -117,7 +117,8 @@ export function Panel({ seat, snap, rows, live, el }: { seat: number; snap?: Me;
           <div key={r} className={`row ${r >= rows - sealed ? 'sealed' : ''}`}>
             {Array.from({ length: 5 }, (_, c) => {
               const m = marks[r]?.[c] as keyof typeof MARK | undefined
-              return <div key={c} className={`tile ${m ? `filled ${MARK[m]}` : r === marks.length && c < (snap?.typed ?? 0) ? 'filled' : ''}`} />
+              const live = r === marks.length, squat = live && snap?.squat.includes(c)
+              return <div key={c} className={`tile ${m ? `filled ${MARK[m]}` : squat ? 'filled squat' : live && c < (snap?.typed ?? 0) + (snap?.squat.filter(i => i <= c).length ?? 0) ? 'filled' : ''}`} />
             })}
           </div>
         ))}

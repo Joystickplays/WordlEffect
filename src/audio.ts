@@ -564,6 +564,14 @@ export class Sound {
     this.glass(r + 48, t + 0.05, 0.04, { dur: 2, rev: 0.9, echo: 0.3, scoop: false })
   }
 
+  // Squatter: a dull wooden thunk as a letter is stamped down.
+  squat() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime + 0.2
+    this.piano(ROOTS[this.root] + 24, t, 0.32, { decay: 0.5, bright: 0.25, rev: 0.25, echo: 0 })
+    this.kick(t, 0.25)
+  }
+
   // Jinx: a playful "uh-oh", a falling minor third that wobbles, from between your board and theirs.
   jinx(pan: number) {
     if (!this.ctx) return
