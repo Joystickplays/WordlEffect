@@ -625,3 +625,88 @@ canvas.fx {
   opacity: 0.2;
   animation-duration: calc(var(--bar) / 4);
 }
+
+/* the (i) beside a mode or trial, and the plain-English note it springs open */
+.info {
+  position: relative;
+  display: inline-block;
+  margin-left: 7px;
+  vertical-align: middle;
+}
+.info button {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgb(235 242 255 / 0.25);
+  font: italic 600 9px/1 Georgia, serif;
+  color: rgb(235 242 255 / 0.5);
+  cursor: pointer;
+  transition: color 0.3s, border-color 0.3s;
+}
+.info button:hover,
+.info button:focus-visible,
+.info button[aria-expanded='true'] {
+  color: #fff;
+  border-color: rgb(235 242 255 / 0.7);
+}
+.pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 10;
+  width: 230px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgb(190 210 255 / 0.18);
+  background: rgb(12 15 28 / 0.97);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.5), 0 0 24px rgb(120 160 255 / 0.12);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-align: left;
+  text-shadow: none;
+  color: rgb(225 232 250 / 0.9);
+  white-space: normal;
+  animation: spring 0.55s linear(0, 0.35 8%, 0.82 18%, 1.08 28%, 1.13 33%, 1.09 40%, 0.98 52%, 0.97 60%, 1.005 75%, 1);
+}
+.hud.left .pop {
+  right: -6px;
+  transform-origin: top right;
+}
+.hud.right .pop {
+  left: -6px;
+  transform-origin: top left;
+}
+@keyframes spring {
+  from {
+    opacity: 0;
+    transform: scale(0.6) translateY(-6px);
+  }
+  15% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pop {
+    animation: none;
+  }
+}
+@media (max-width: 640px) {
+  /* on phones the settings sit at the screen's edges, so the notes open inward */
+  .hud.left .pop {
+    right: auto;
+    left: -6px;
+    transform-origin: top left;
+  }
+  .hud.right .pop {
+    left: auto;
+    right: -6px;
+    transform-origin: top right;
+  }
+  .pop {
+    width: min(230px, 70vw);
+  }
+}
