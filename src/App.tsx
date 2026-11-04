@@ -1308,6 +1308,9 @@ export default function App() {
       {code && (
         <p className="line">
           {ended ? ended.line : line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
+          {lobby && room && selfId in room.seats && !line && (
+            <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
+          )}
           {lobby && room && room.settings.versus === 'teams' && selfId in room.seats && !line && (
             <span className="sides">
               {[0, 1].map(t => (
@@ -1320,9 +1323,6 @@ export default function App() {
           )}
           {lobby && room && room.settings.versus === 'echoes' && selfId in room.seats && !line && (
             <span className="sides">you'll face {seated} {seated === 1 ? 'echo' : 'echoes'}</span>
-          )}
-          {lobby && room && selfId in room.seats && !line && (
-            <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
           )}
         </p>
       )}

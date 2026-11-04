@@ -1164,7 +1164,7 @@ canvas.fx {
   flex-wrap: wrap;
   justify-content: center;
   gap: 4px 14px;
-  margin-bottom: 6px;
+  margin-top: 6px;
 }
 .sides .side-0 {
   color: rgb(255 205 140 / 0.75);
