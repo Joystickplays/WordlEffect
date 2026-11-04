@@ -11,7 +11,13 @@ const rand = (a: number, b: number) => a + Math.random() * (b - a)
 const ARP = [60, 64, 67, 71, 72] // C E G B C: the Cmaj7 arpeggio, one note per column, landing home on the octave
 const PENTA = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81] // letters map onto this, so every word hums its own tune
 const ROOTS = [36, 33, 29, 31] // C A F G under a fixed E-G-B-D pad: Cmaj9, Am11, Fmaj13#11, G6/9
-const PAD = [52, 55, 59, 62]
+// the pad's voicing for each chord, voice-led so each note moves a step or not at all
+const PAD = [
+  [52, 55, 59, 62], // C: E G B D
+  [52, 55, 60, 64], // Am: E G C E
+  [53, 57, 60, 64], // F: F A C E
+  [50, 55, 59, 62], // G: D G B D
+]
 const BELLS = [72, 74, 76, 79, 81, 83, 84, 86, 88, 91]
 const RISE = [72, 76, 79, 83, 84, 88, 91, 95, 96, 100]
 const OSTINATO = [0, 7, 12, 7, 0, 7, 14, 7] // root, fifth, octave, ninth: in key over every chord
@@ -45,6 +51,7 @@ export class Sound {
   bass!: { osc: OscillatorNode; o: number }[]
   bassG!: GainNode
   padF!: BiquadFilterNode
+  pad: OscillatorNode[][] = []
   padG!: GainNode
   shimG!: GainNode
   airG!: GainNode
@@ -197,15 +204,18 @@ export class Sound {
     this.padF.Q.value = 0.8
     this.padG = c.createGain()
     this.padG.gain.value = 0
-    PAD.forEach(m =>
-      [-7, 7].forEach(cents => {
+    this.pad = PAD[0].map((m, v) =>
+      [-7, 7].map(cents => {
         const o = c.createOscillator(), g = c.createGain()
-        o.type = 'sawtooth'
+        o.type = v % 2 ? 'triangle' : 'sawtooth' // two bright voices, two soft ones
         o.frequency.value = mtof(m)
         o.detune.value = cents + rand(-2, 2)
-        g.gain.value = 0.05
+        this.lfo(0.013 + v * 0.007, 6, o.detune) // each voice drifts a few cents on its own slow clock
+        g.gain.value = 0.045
+        this.lfo(0.021 + v * 0.017, 0.03, g.gain) // and swells in and out, so the chord never sits still
         o.connect(g).connect(this.padF)
         o.start()
+        return o
       }),
     )
     this.lfo(0.05, 160, this.padF.frequency) // the filter breathes like a slow tide
@@ -281,8 +291,8 @@ export class Sound {
       const T = this.hold ? 0 : this.tension
       const heart = Math.min(1, Math.max(0, this.energy - 0.5) * 2 + (this.streak >= 2 ? 0.35 : 0) + (this.flourish > t ? 0.5 : 0) + T * 0.5)
       if (s % (T > 0.75 ? 4 : 8) === 0 && heart > 0.05) {
-        this.kick(t, 0.45 * heart)
-        this.kick(t + 0.19, 0.25 * heart) // lub-dub
+        this.kick(t, 0.12 * heart) // felt more than heard
+        this.kick(t + 0.19, 0.07 * heart) // lub-dub
         this.emit('beat', t, heart)
       }
 
@@ -307,6 +317,7 @@ export class Sound {
   chord(i: number, t: number) {
     this.root = i
     this.bass.forEach(({ osc, o }) => osc.frequency.setTargetAtTime(mtof(ROOTS[i] + o), t, 0.25))
+    this.pad.forEach((voice, v) => voice.forEach(o => o.frequency.setTargetAtTime(mtof(PAD[i][v]), t, 0.6))) // the pad glides to the new chord
     this.emit('chord', t, i)
   }
 
