@@ -132,3 +132,11 @@ export function hardest(answers: string[], share = 0.15) {
   const hard = (w: string) => [...w].reduce((s, ch) => s - Math.log(freq[ch] / answers.length), 0) + (5 - new Set(w).size) * 2
   return [...answers].sort((a, b) => hard(b) - hard(a)).slice(0, Math.max(3, Math.round(answers.length * share)))
 }
+
+// Skills: a weighted spin of the reel.
+export function roll<K extends string>(weights: Record<K, number>, rand = Math.random): K {
+  const keys = Object.keys(weights) as K[], total = keys.reduce((s, k) => s + weights[k], 0)
+  let x = rand() * total
+  for (const k of keys) if ((x -= weights[k]) < 0) return k
+  return keys[keys.length - 1]
+}

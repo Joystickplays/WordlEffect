@@ -1,11 +1,13 @@
 // The parts of playing together you can see: the room's settings, and everyone else's board in miniature.
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { COLOURS, type Me, type Mode, type Settings } from './net.ts'
+import { SKILLS, type Skill } from './skills.ts'
 const MODES: Mode[] = ['light', 'tide', 'stars']
 const MODE_NAMES = { light: 'last light', tide: 'tide', stars: 'stars' }
 const LOCKS = ['off', 'gentle', 'fierce']
 const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost', 'squatter', 'hot potato', 'rigged', 'jinx']
 const MARK = { c: 'correct', p: 'present', a: 'absent' } as const
+const GUARDS: Record<string, string> = { m: 'Mirror shield is up', d: 'Decoy is up', w: 'Second wind is ready' }
 const after = <T,>(list: readonly T[], v: T) => list[(list.indexOf(v) + 1) % list.length]
 const still = (e: { preventDefault(): void }) => e.preventDefault() // keep focus off, so Enter still reaches the board
 
@@ -21,6 +23,7 @@ const ABOUT: Record<string, string> = {
   squatter: "Locks don't freeze rows any more. Instead, each one drops a random letter into a box on your next row, and you can't delete it. Your guess has to work around it.",
   'hot potato': "A hot potato sits on someone's board with a hidden timer. Solve a word to throw it at the leader. Whoever holds it when it goes off gets 3 locks.",
   rigged: "When the leader finishes a word, the player in last place picks the leader's next word from three nasty ones.",
+  skills: `Solving a word spins a reel that gives you a skill. Keep up to 3, and press 1, 2 or 3 to use one. ${Object.values(SKILLS).map(s => `${s.name}: ${s.about}`).join(' ')}`,
   jinx: "If you guess exactly the same word as someone else, on the same word number, you both lose a row. Common openers get dangerous.",
 }
 
@@ -94,10 +97,19 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
           })}
         </span>
       </p>
+      <Choice label="Skills" value={s.skills ? 'on' : 'off'} onClick={ch({ skills: !s.skills })} about="skills" />
       <Choice label="Seats" value={s.seats} onClick={ch({ seats: s.seats === 8 ? 2 : s.seats + 1 })} />
       {s.mode === 'tide' && <Choice label="Length" value={`${s.tide} min`} onClick={ch({ tide: after([3, 5, 10], s.tide) })} />}
       {s.mode === 'stars' && <Choice label="Stars" value={s.stars} onClick={ch({ stars: s.stars === 3 ? 5 : 3 })} />}
     </>
+  )
+}
+
+export function Icon({ s }: { s: Skill }) {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="icon">
+      <path d={SKILLS[s].icon} />
+    </svg>
   )
 }
 
@@ -131,6 +143,12 @@ export function Panel({ seat, snap, rows, live, potato, el }: { seat: number; sn
         {live && <Which n={snap?.n ?? 0} out={snap?.out} done={snap?.done} />}
         {potato && <span className="potato" aria-label={`${name} has the hot potato`}>🥔</span>}
       </figcaption>
+      {live && !!snap?.bag && (
+        <div className="bag small" aria-label={`${name}'s skills: ${[...snap.bag].map(k => SKILLS[k as Skill].name).join(', ')}`}>
+          {[...snap.bag].map((k, i) => <i key={i} title={SKILLS[k as Skill].name}><Icon s={k as Skill} /></i>)}
+          {[...snap.guard].map(g => <b key={g} title={GUARDS[g]}>{g === 'm' ? <Icon s="m" /> : g === 'd' ? <Icon s="d" /> : <Icon s="w" />}</b>)}
+        </div>
+      )}
     </figure>
   )
 }

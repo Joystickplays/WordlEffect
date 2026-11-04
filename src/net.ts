@@ -10,8 +10,8 @@ export const V = 2 // bump when messages change shape, so mismatched versions sa
 export type Mode = 'light' | 'tide' | 'stars'
 export const TRIALS = ['strict', 'undertow', 'fading', 'frost', 'squatter', 'potato', 'rigged', 'jinx'] as const
 export type Trial = (typeof TRIALS)[number]
-export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number; lang: Lang }
-export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3, lang: 'en' }
+export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number; lang: Lang; skills: boolean }
+export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3, lang: 'en', skills: false }
 export const has = (s: Settings, t: Trial) => !!(s.trials & (1 << TRIALS.indexOf(t)))
 
 // Players are their colours, by seat.
@@ -19,7 +19,7 @@ export const COLOURS = [['rose', 340], ['gold', 45], ['fern', 100], ['mint', 150
 
 export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; round: number; seats: Record<string, number> }
 // One player's whole panel. Marks only ("ccpaa"), never letters.
-export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean }
+export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean; bag: string; guard: string }
 export type Lock = { to: string; n: number }
 // Everything else players do to each other: throwing the hot potato, rigging a word, using a skill.
 export type Potato = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
@@ -33,7 +33,7 @@ const int = (x: unknown, lo: number, hi: number) => num(x, lo, hi) && Number.isI
 
 const okSettings = (s: unknown) =>
   obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 255) &&
-  int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number) && (s.lang === 'en' || s.lang === 'id')
+  int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number) && (s.lang === 'en' || s.lang === 'id') && typeof s.skills === 'boolean'
 const okRoom = (r: unknown): r is Room =>
   obj(r) && okSettings(r.settings) && (r.phase === 'lobby' || r.phase === 'play') && int(r.seed, 0, 2 ** 32) && int(r.round, 0, 1e6) &&
   obj(r.seats) && Object.keys(r.seats).length <= 8 && Object.values(r.seats).every(v => int(v, 0, 7))
@@ -43,7 +43,8 @@ const okMe = (m: unknown): m is Me =>
   int(m.pending, 0, 99) && num(m.score, 0, 1e9) && num(m.energy, 0, 1) && typeof m.out === 'boolean' && typeof m.done === 'boolean' &&
   Array.isArray(m.stars) && m.stars.length <= 5 && m.stars.every(t => num(t, 0, 1e8)) &&
   Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32)) &&
-  Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4)) && typeof m.rigged === 'boolean'
+  Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4)) && typeof m.rigged === 'boolean' &&
+  typeof m.bag === 'string' && /^[tlwdms]{0,3}$/.test(m.bag) && typeof m.guard === 'string' && /^[mdw]{0,3}$/.test(m.guard)
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
 const id = (x: unknown) => typeof x === 'string' && x.length < 64
 const okEv = (e: unknown): e is Ev =>

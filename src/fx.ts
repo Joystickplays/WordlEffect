@@ -392,6 +392,51 @@ export class FX {
     setTimeout(() => this.burst(b.x, b.y, 16 * n, { col: ICE, speed: [30, 160], life: [0.6, 1.4], scale: 0.8, sparks: 0.1, hot: 2 }), 1000)
   }
 
+  // ——— skills ———
+
+  // A skill landing in its slot: a ring of sparks, gold for legendary, violet for rare, cool white for common.
+  spin({ x, y }: Pt, rarity: string) {
+    const col = rarity === 'legendary' ? hsl(45, 1, 0.65) : rarity === 'rare' ? hsl(275, 0.9, 0.72) : hsl(200, 0.6, 0.85)
+    this.burst(x, y, rarity === 'legendary' ? 90 : 40, { col: () => (Math.random() < 0.7 ? col : WHITE), speed: [30, rarity === 'legendary' ? 320 : 160], life: [0.5, 1.4], scale: 0.8, sparks: 0.3, hot: 2.8 })
+    this.wave(x, y, col, rarity === 'legendary' ? 0.7 : 0.3)
+  }
+
+  // Thaw: frozen rows turn to warm droplets that fall away, and a warm wave washes the board.
+  thaw(tiles: Tile[], b: Pt) {
+    for (const t of tiles) {
+      this.add({ x: t.x, y: t.y, life: 0.6, age: 0.125, size: t.w / 2, shape: BOX, aspect: 1, align: false, ang: 0, rgb: hsl(35, 1, 0.75), hot: 0.6 })
+      for (let i = 0; i < 12 * this.q; i++)
+        this.add({ x: t.x + rand(-t.w / 2, t.w / 2), y: t.y + rand(-t.w / 3, t.w / 3), vx: rand(-15, 15), vy: rand(-30, 10), grav: 260, drag: 0.99, life: rand(0.8, 1.6), rgb: Math.random() < 0.5 ? ICE : hsl(40, 1, 0.75), shape: SPARK, size: rand(1.5, 3), aspect: 1, align: false })
+    }
+    this.wave(b.x, b.y, hsl(35, 1, 0.7), 0.6)
+    this.poke(0.04, 0.6)
+  }
+
+  // Lantern: a warm light drifts down from above the board and settles in one box.
+  lantern(b: Pt, t: Tile) {
+    const col = hsl(42, 1, 0.68)
+    for (let i = 0; i < 40 * this.q; i++)
+      this.add({ x: b.x, y: b.y - 300, life: rand(0.9, 1.3), delay: rand(0, 0.3), rgb: Math.random() < 0.8 ? col : WHITE, ...bit(0.9, 0.35, 2.6), align: true, path: [t.x + rand(-80, 80), t.y - 260, t.x, t.y] })
+    setTimeout(() => {
+      this.flash(t, 2.2)
+      this.add({ x: t.x, y: t.y, life: 1.2, age: 0.125, size: t.w * 0.9, shape: SPARK, aspect: 1, align: false, rgb: col, hot: 1.2 })
+    }, 1100)
+  }
+
+  // Second wind, armed: a gust swirls once around the board.
+  gust(b: Pt) {
+    for (let i = 0; i < 60 * this.q; i++)
+      this.add({ x: b.x, y: b.y, life: rand(1, 1.6), rgb: hsl(180, 0.5, 0.85), ...bit(0.8, 0.05, 1.6), align: true, orbit: { cx: b.x, cy: b.y, r: rand(150, 230), a: rand(0, TAU), w: 4, grow: rand(20, 60) } })
+  }
+
+  // Second wind, used: the row's letters are blown off to the right.
+  wind(tiles: Tile[]) {
+    for (const t of tiles)
+      for (let i = 0; i < 16 * this.q; i++)
+        this.add({ x: t.x + rand(-t.w / 2, t.w / 2), y: t.y + rand(-t.w / 2, t.w / 2), vx: rand(300, 700), vy: rand(-60, 40), drag: 0.96, life: rand(0.8, 1.5), rgb: hsl(185, 0.5, 0.85), ...bit(0.8, 0.05, 1.6), align: true })
+    this.rim.xv += 120
+  }
+
   // Rigged: violet shards spiral in onto your board, like a hand dealing you a bad card.
   rigged({ x, y }: Pt, hue: number) {
     const col = hsl(hue, 0.9, 0.7)

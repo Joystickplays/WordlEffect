@@ -1,10 +1,11 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Potato } from './net.ts'
-import { Setup, Panel, Which } from './Room.tsx'
+import { Setup, Panel, Which, Icon } from './Room.tsx'
+import { SKILLS, CODES, type Skill } from './skills.ts'
 
 const ROWS = 6
 const COLS = 5
@@ -14,6 +15,7 @@ const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
 const pick = (lang: Lang) => WORDS[lang].answers[Math.floor(Math.random() * WORDS[lang].answers.length)]
 const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answers, 0.08) }
+const READY: Skill[] = ['t', 'l', 'w'] // skills the reel can land on
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
@@ -23,6 +25,7 @@ const freshMatch = () => ({
   said: [] as number[], jinxed: [] as string[], // this word's guess fingerprints, and jinxes already settled
   from: [] as string[], // who sent the locks waiting for us, oldest first
   rig: null as { word: string; by: string } | null, // Rigged: the next word someone picked for us
+  bag: [] as Skill[], dusk: 0, wind: false, decoy: 0, mirror: false, // Skills: what we hold, and what's switched on
   potato: { holder: '', gen: 0, fuse: 0 }, // Hot potato: who has it, which throw this is, and (if it's ours) when it goes off
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -85,6 +88,10 @@ export default function App() {
   const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
   const [squat, setSquat] = useState<Record<number, { ch: string; by: string }>>({}) // Squatter: letters stuck in the next row
   const [potato, setPotato] = useState('') // who is holding the hot potato
+  const [bag, setBag] = useState<Skill[]>([]) // Skills: up to three, slot by slot
+  const [spin, setSpin] = useState(-1) // the slot whose reel is still spinning
+  const [hint, setHint] = useState<{ pos: number; ch: string } | null>(null) // Lantern: a letter lit in its box
+  const [guard, setGuard] = useState('') // skills switched on: m(irror), d(ecoy), w(ind)
   const [rig, setRig] = useState<{ to: string; words: string[]; until: number } | null>(null) // Rigged: our pick of their next word
   const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
   const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
@@ -175,7 +182,7 @@ export default function App() {
   function onKey(k: string) {
     if (snd.current.wake()) fx.current.wake()
     if (!woke) setWoke(true)
-    if (rig && /^[123]$/.test(k)) return rigWith(rig.words[+k - 1])
+    if (/^[123]$/.test(k)) return rig ? rigWith(rig.words[+k - 1]) : cast(+k - 1)
     if (phase === 'over') {
       if (k === 'enter' && !code) restart()
       else if (k === 'enter' && ended && host && roomRef.current) publish(seat({ ...roomRef.current, phase: 'lobby' }, peersRef.current))
@@ -252,14 +259,24 @@ export default function App() {
     setStreak(s.streak)
     say(`${word}: ${marks.map((m, i) => `${word[i]} ${NAMES[m]}`).join(', ')}`)
     const rowsAll = m.live ? m.S.rows : ROWS
+    // Second wind: a wrong guess blows away instead of using up its row (its colours stay on the keyboard)
+    const blown = m.live && !won && m.wind, used = blown ? r : r + 1
+    if (blown) {
+      m.wind = false
+      setGuard(guards())
+      fx.current.wind(Array.from({ length: COLS }, (_, c) => tile(r, c)))
+      snd.current.wind()
+      setRows(rs => rs.slice(0, -1))
+      s.guesses--
+    }
     if (m.live) {
       // a long streak or a quick solve sends locks; they melt your own pending ones first
       const t = trade(Math.min(6, locksFor(s.streak, extended, won, r + 1) * m.S.locks), m.pending)
       m.pending = t.pending
       if (t.sent) fire(t.sent)
-      if (!won && has(m.S, 'squatter')) squatters(r + 1, marks, word)
+      if (!won && has(m.S, 'squatter')) squatters(used, marks, word)
       else if (!won) {
-        const l = land(m.pending, rowsAll - m.sealed - (r + 1), has(m.S, 'frost'))
+        const l = land(m.pending, rowsAll - m.sealed - used, has(m.S, 'frost'))
         m.pending = l.pending
         m.from = m.from.slice(-m.pending)
         if (l.now) seal(l.now, true)
@@ -268,11 +285,11 @@ export default function App() {
     }
     if (!won) {
       snd.current.combo(snd.current.grid(EIGHTH), Math.max(...chain) + 1, s.streak)
-      snd.current.setTension(tensionOf(s.greens.size, rowsAll - m.sealed - r - 1))
+      snd.current.setTension(tensionOf(s.greens.size, rowsAll - m.sealed - used))
       charge(energyOf(s))
     }
     if (won) finish('won', r)
-    else if (r + 1 >= rowsAll - m.sealed) finish('lost', r)
+    else if (used >= rowsAll - m.sealed) finish('lost', r)
     else setPhase(m.ended ? 'over' : 'play')
     if (m.live && has(m.S, 'fading')) {
       const word = `${m.round}:${m.n}`
@@ -286,6 +303,7 @@ export default function App() {
     if (!m.live) setClock(c => ({ ...c, end: Date.now() }))
     if (m.live && res === 'won' && m.S.mode === 'stars') m.stars = [...m.stars, performance.now() - m.start]
     if (m.live && res === 'won' && m.potato.holder === selfId) throwPotato(false)
+    if (m.live && res === 'won' && m.S.skills && m.bag.length < 3) spinReel()
     // heavy frost carries this word's locked rows into the next one; a solve in 3 or fewer thaws one
     m.carry = has(m.S, 'frost') ? Math.max(0, m.locked - (res === 'won' && r < 3 ? 1 : 0)) : 0
     const t = snd.current.grid(BEAT)
@@ -337,6 +355,7 @@ export default function App() {
     setFaded(0)
     setLate(false)
     setSquat({})
+    setHint(null)
     if (keep) {
       fx.current.setStreak(stats.current.streak)
       snd.current.setStreak(stats.current.streak)
@@ -449,6 +468,8 @@ export default function App() {
     setLive(true)
     setPotato('')
     setRig(null)
+    setBag([])
+    setGuard('')
     setEnded(null)
     setPending(0)
     setPhase('busy')
@@ -475,6 +496,7 @@ export default function App() {
     m.said = []
     // dusk: in Last light, every 3 minutes every board loses a row for good, down to 3, so matches always end
     const dusk = m.S.mode === 'light' ? Math.min(m.S.rows - 3, Math.floor((performance.now() - m.start) / 180000)) : 0
+    m.dusk = dusk
     m.locked = Math.min(m.carry, m.S.rows - 1 - dusk)
     m.sealed = dusk + m.locked
     setSealed(m.sealed)
@@ -600,6 +622,70 @@ export default function App() {
     snd.current.seal()
   }
 
+  // ——— skills ———
+
+  const guards = () => { const m = mp.current; return (m.mirror ? 'm' : '') + (m.decoy ? 'd' : '') + (m.wind ? 'w' : '') }
+
+  // Solving spins the reel in the next free slot; it lands after a moment, rarer skills less often.
+  function spinReel() {
+    const m = mp.current, s = roll(Object.fromEntries(CODES.filter(k => READY.includes(k)).map(k => [k, SKILLS[k].weight])) as Record<Skill, number>)
+    m.bag = [...m.bag, s]
+    setBag(m.bag)
+    setSpin(m.bag.length - 1)
+    snd.current.spin(SKILLS[s].rarity)
+    setTimeout(() => {
+      setSpin(-1)
+      const el = document.querySelectorAll('.bag.mine i')[m.bag.indexOf(s)]
+      if (el) fx.current.spin(center(el), SKILLS[s].rarity)
+      say(`New skill: ${SKILLS[s].name}`)
+    }, 1300)
+  }
+
+  function cast(i: number) {
+    const m = mp.current, s = m.bag[i]
+    if (!s || !m.live || m.out || m.done || m.ended || spin === i) return
+    const ok = skill(s)
+    if (!ok) return snd.current.invalid()
+    m.bag = m.bag.filter((_, j) => j !== i)
+    setBag(m.bag)
+    setGuard(guards())
+  }
+
+  // Each skill does its thing and returns whether it could.
+  function skill(s: Skill) {
+    const m = mp.current, st = stats.current
+    if (s === 't') {
+      if (m.sealed === m.dusk && !m.pending && !Object.keys(squat).length) return false
+      const thawed = Array.from({ length: m.sealed - m.dusk }, (_, k) => m.S.rows - m.sealed + k)
+      fx.current.thaw(thawed.flatMap(r => Array.from({ length: COLS }, (_, c) => tile(r, c))), center(board.current))
+      Object.assign(m, { sealed: m.dusk, locked: 0, carry: 0, pending: 0, from: [] })
+      setSealed(m.sealed)
+      setPending(0)
+      setSquat({})
+      snd.current.thaw()
+      flash('thawed')
+      return true
+    }
+    if (s === 'l') {
+      const open = [0, 1, 2, 3, 4].filter(i => !st.greens.has(i) && hint?.pos !== i)
+      if (!open.length || phase === 'over') return false
+      const pos = open[Math.floor(Math.random() * open.length)]
+      setHint({ pos, ch: answer[pos] })
+      fx.current.lantern(center(board.current), tile(Math.min(rows.length, m.S.rows - 1), pos))
+      snd.current.lantern()
+      return true
+    }
+    if (s === 'w') {
+      if (m.wind) return false
+      m.wind = true
+      fx.current.gust(center(board.current))
+      snd.current.wind()
+      flash('second wind is ready')
+      return true
+    }
+    return false
+  }
+
   // Hot potato: whoever holds it when its hidden fuse runs out takes 3 locks. Solving a word throws it at the leader.
   function lit(exclude = selfId) {
     const m = mp.current, snaps = snapsRef.current
@@ -721,10 +807,12 @@ export default function App() {
       said: m.live ? m.said : [],
       squat: Object.keys(squat).map(Number),
       rigged: !!m.rig,
+      bag: m.live ? m.bag.join('') : '',
+      guard: m.live ? guards() : '',
     }
   }
   const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
-  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, pending, energy, live, total, squat])
+  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, pending, energy, live, total, squat, bag, guard])
 
   // Someone's panel changed. Their new greens sound faintly from their side of the screen.
   function gotMe(m: Me, id: string) {
@@ -853,9 +941,10 @@ export default function App() {
                 const drain = trial('fading') && r < faded
                 const caret = phase === 'play' && r === rows.length && c === open[cur.length]
                 const sq = now ? squat[c] : undefined
+                const lit = now && hint?.pos === c && !word[c]?.trim()
                 return (
-                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c]?.trim() ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''} ${drain ? 'drain' : ''} ${sq ? 'squat' : ''}`} style={sq ? ({ '--h': hueOf(sq.by) } as CSSProperties) : undefined}>
-                    {word[c]?.trim() && <span key={word[c]}>{word[c]}</span>}
+                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c]?.trim() ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''} ${drain ? 'drain' : ''} ${sq ? 'squat' : ''} ${lit ? 'hint' : ''}`} style={sq ? ({ '--h': hueOf(sq.by) } as CSSProperties) : undefined}>
+                    {word[c]?.trim() ? <span key={word[c]}>{word[c]}</span> : lit && <span className="ghost-letter">{hint.ch}</span>}
                   </div>
                 )
               })}
@@ -868,6 +957,20 @@ export default function App() {
           you{live && <Which n={mp.current.n} out={mp.current.out} done={mp.current.done} />}
           {live && potato === selfId && <span className="potato" aria-label="You have the hot potato">🥔</span>}
         </figcaption>
+      )}
+      {live && room?.settings.skills && (
+        <div className="bag mine" aria-label="Your skills">
+          {[0, 1, 2].map(i => {
+            const s = bag[i]
+            return (
+              <button key={i} className={`${s ? SKILLS[s].rarity : 'empty'} ${spin === i ? 'spinning' : ''}`} disabled={!s || spin === i} onMouseDown={e => e.preventDefault()} onClick={() => cast(i)} aria-label={s ? `${i + 1}: ${SKILLS[s].name}. ${SKILLS[s].about}` : `Slot ${i + 1}: empty`} title={s ? `${SKILLS[s].name}: ${SKILLS[s].about}` : 'Solve a word to win a skill'}>
+                <i>{spin === i ? <span className="reel">{CODES.map(k => <Icon key={k} s={k} />)}</span> : s && <Icon s={s} />}</i>
+                <small>{i + 1}</small>
+              </button>
+            )
+          })}
+          {[...guard].map(g => <b key={g} className="on" title={g === 'm' ? 'Mirror shield is up' : g === 'd' ? 'Decoy is up' : 'Second wind is ready'}><Icon s={g as Skill} /></b>)}
+        </div>
       )}
       </figure>
       {code && room && others.map(id => (

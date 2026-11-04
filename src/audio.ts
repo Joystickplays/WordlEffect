@@ -564,6 +564,38 @@ export class Sound {
     this.glass(r + 48, t + 0.05, 0.04, { dur: 2, rev: 0.9, echo: 0.3, scoop: false })
   }
 
+  // ——— skills ———
+
+  // The reel: quick ticks, then a landing chime that's grander the rarer the skill.
+  spin(rarity: string) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    for (let i = 0; i < 9; i++) this.glass(84 + (i % 3) * 3, t + i * 0.12 * (1 + i * 0.06), 0.03, { dur: 0.3, rev: 0.3, echo: 0, scoop: false })
+    const land = t + 1.3, chord = rarity === 'legendary' ? [72, 76, 79, 83, 88] : rarity === 'rare' ? [72, 76, 79] : [79, 84]
+    chord.forEach((m, i) => this.glass(m, land + i * 0.04, 0.07, { pan: (i - 2) * 0.2, dur: 2.4, rev: 0.9, echo: 0.4, scoop: false }))
+  }
+
+  // Thaw: a warm rising sixth on the piano, and drips.
+  thaw() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    ;[60, 64, 69, 72].forEach((m, i) => this.piano(m, t + i * 0.09, 0.22, { decay: 3, rev: 0.6, echo: 0.2, pan: (i - 1.5) * 0.2 }))
+    for (let i = 0; i < 5; i++) this.glass(91 + (i % 2) * 5, t + 0.4 + i * rand(0.12, 0.25), 0.03, { pan: rand(-0.6, 0.6), dur: 0.6, rev: 0.8, echo: 0.3 })
+  }
+
+  // Lantern: three soft bells as the light comes down.
+  lantern() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    ;[83, 88, 91].forEach((m, i) => this.glass(m, t + i * 0.35, 0.06, { dur: 2.6, rev: 1, echo: 0.5, scoop: false }))
+  }
+
+  // Second wind: a breath of air.
+  wind() {
+    if (!this.ctx) return
+    this.whoosh(this.ctx.currentTime, 0.9, 0.08)
+  }
+
   // Rigged: a sly chromatic slide down, as your next word turns out to be someone else's choice.
   rigged(pan: number) {
     if (!this.ctx) return
