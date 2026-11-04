@@ -596,6 +596,38 @@ export class Sound {
     this.whoosh(this.ctx.currentTime, 0.9, 0.08)
   }
 
+  // Decoy: a bright double tap, panned away from you.
+  decoy() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.glass(88, t, 0.05, { pan: -0.6, dur: 1, rev: 0.7, echo: 0.4, scoop: false })
+    this.glass(88, t + 0.11, 0.05, { pan: 0.6, dur: 1, rev: 0.7, echo: 0.4, scoop: false })
+  }
+
+  // Mirror shield: a shimmer that rises and hangs.
+  shield() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    ;[79, 83, 86, 91].forEach((m, i) => this.glass(m, t + i * 0.05, 0.045, { pan: (i - 1.5) * 0.3, dur: 3, rev: 1, echo: 0.5, scoop: false }))
+  }
+
+  // Mirror shield, hit: a sharp ring.
+  bounce() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.glass(96, t, 0.09, { dur: 1.6, rev: 0.9, echo: 0.5, scoop: false })
+    this.glass(91, t + 0.02, 0.06, { dur: 1.6, rev: 0.9, echo: 0.5, scoop: false })
+  }
+
+  // Swap: a whoosh, and the chord turns over.
+  swap() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.whoosh(t, 1.1, 0.1)
+    ;[67, 71, 74, 79].forEach((m, i) => this.piano(m, t + 0.5 + i * 0.06, 0.2, { decay: 3, rev: 0.6, echo: 0.3, pan: (i - 1.5) * 0.3 }))
+    this.chord((this.root + 2) % 4, t + 0.5)
+  }
+
   // Rigged: a sly chromatic slide down, as your next word turns out to be someone else's choice.
   rigged(pan: number) {
     if (!this.ctx) return

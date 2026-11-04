@@ -3,7 +3,7 @@ import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Potato } from './net.ts'
+import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Potato, type Swap, type Board } from './net.ts'
 import { Setup, Panel, Which, Icon } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 
@@ -15,7 +15,6 @@ const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
 const pick = (lang: Lang) => WORDS[lang].answers[Math.floor(Math.random() * WORDS[lang].answers.length)]
 const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answers, 0.08) }
-const READY: Skill[] = ['t', 'l', 'w'] // skills the reel can land on
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
@@ -26,6 +25,7 @@ const freshMatch = () => ({
   from: [] as string[], // who sent the locks waiting for us, oldest first
   rig: null as { word: string; by: string } | null, // Rigged: the next word someone picked for us
   bag: [] as Skill[], dusk: 0, wind: false, decoy: 0, mirror: false, // Skills: what we hold, and what's switched on
+  swap: '', // Swap: who we've asked, while we wait for their board
   potato: { holder: '', gen: 0, fuse: 0 }, // Hot potato: who has it, which throw this is, and (if it's ours) when it goes off
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
@@ -91,6 +91,7 @@ export default function App() {
   const [bag, setBag] = useState<Skill[]>([]) // Skills: up to three, slot by slot
   const [spin, setSpin] = useState(-1) // the slot whose reel is still spinning
   const [hint, setHint] = useState<{ pos: number; ch: string } | null>(null) // Lantern: a letter lit in its box
+  const [aim, setAim] = useState(-1) // Swap: the slot waiting for you to pick a board
   const [guard, setGuard] = useState('') // skills switched on: m(irror), d(ecoy), w(ind)
   const [rig, setRig] = useState<{ to: string; words: string[]; until: number } | null>(null) // Rigged: our pick of their next word
   const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
@@ -470,6 +471,8 @@ export default function App() {
     setRig(null)
     setBag([])
     setGuard('')
+    setAim(-1)
+    fx.current.shield(false)
     setEnded(null)
     setPending(0)
     setPhase('busy')
@@ -628,7 +631,7 @@ export default function App() {
 
   // Solving spins the reel in the next free slot; it lands after a moment, rarer skills less often.
   function spinReel() {
-    const m = mp.current, s = roll(Object.fromEntries(CODES.filter(k => READY.includes(k)).map(k => [k, SKILLS[k].weight])) as Record<Skill, number>)
+    const m = mp.current, s = roll(Object.fromEntries(CODES.map(k => [k, SKILLS[k].weight])) as Record<Skill, number>)
     m.bag = [...m.bag, s]
     setBag(m.bag)
     setSpin(m.bag.length - 1)
@@ -641,9 +644,10 @@ export default function App() {
     }, 1300)
   }
 
-  function cast(i: number) {
+  function cast(i: number, at?: string) {
     const m = mp.current, s = m.bag[i]
     if (!s || !m.live || m.out || m.done || m.ended || spin === i) return
+    if (s === 's') return swapWith(i, at)
     const ok = skill(s)
     if (!ok) return snd.current.invalid()
     m.bag = m.bag.filter((_, j) => j !== i)
@@ -675,6 +679,22 @@ export default function App() {
       snd.current.lantern()
       return true
     }
+    if (s === 'd') {
+      if (m.decoy) return false
+      m.decoy = 2
+      fx.current.decoy(center(board.current), hueOf(selfId))
+      snd.current.decoy()
+      flash('a decoy is up')
+      return true
+    }
+    if (s === 'm') {
+      if (m.mirror) return false
+      m.mirror = true
+      fx.current.shield(true)
+      snd.current.shield()
+      flash('your mirror shield is up')
+      return true
+    }
     if (s === 'w') {
       if (m.wind) return false
       m.wind = true
@@ -684,6 +704,99 @@ export default function App() {
       return true
     }
     return false
+  }
+
+  // Swap: the first press aims (click a board), a second press swaps with the leader.
+  function swapWith(i: number, at?: string) {
+    const m = mp.current, free = m.S.rows - m.sealed - rows.length
+    if (!at && aim !== i) {
+      setAim(i)
+      return flash('click a board to swap with, or press again for the leader')
+    }
+    setAim(-1)
+    const to = at ?? target(lit())?.id
+    if (!to || phase !== 'play' || free <= 1 || m.swap) return snd.current.invalid()
+    m.swap = to
+    setPhase('busy')
+    net.current?.ev({ k: 'swap', to, reply: false, ok: false, bounced: false, board: mine() }, to)
+    setTimeout(() => m.swap === to && endSwap(i, "they didn't answer"), 3000)
+  }
+
+  const mine = (): Board => {
+    const m = mp.current
+    return { answer, rows: rows.map(r => r.word), sealed: m.sealed - m.dusk }
+  }
+
+  function endSwap(i: number, why: string, used = false) {
+    const m = mp.current
+    m.swap = ''
+    setPhase('play')
+    flash(why)
+    if (used) {
+      m.bag = m.bag.filter((_, j) => j !== i)
+      setBag(m.bag)
+    }
+  }
+
+  function gotSwap(e: Swap, from: string) {
+    const m = mp.current, name = COLOURS[m.seats[from] ?? 0][0]
+    if (e.to !== selfId || !m.live) return
+    if (e.reply) {
+      if (m.swap !== from) return
+      const i = m.bag.indexOf('s')
+      if (e.ok && e.board) {
+        endSwap(i, `you swapped boards with ${name}`, true)
+        take(e.board, from)
+      } else endSwap(i, e.bounced ? `it bounced off ${name}'s mirror` : `${name} is busy, try again`, e.bounced)
+      return
+    }
+    const free = m.S.rows - m.sealed - rows.length, el = panelEls.current[from]
+    const reply = (ok: boolean, bounced: boolean, board: Board | null) => net.current?.ev({ k: 'swap', to: from, reply: true, ok, bounced, board }, from)
+    if (m.mirror) {
+      m.mirror = false
+      setGuard(guards())
+      fx.current.shield(false)
+      if (el) fx.current.bounce(center(board.current), center(el), hueOf(from))
+      snd.current.bounce()
+      flash(`${name}'s swap bounced off your mirror`)
+      return reply(false, true, null)
+    }
+    if (phase !== 'play' || m.out || m.done || m.ended || free <= 1 || !e.board) return reply(false, false, null)
+    reply(true, false, mine())
+    take(e.board, from)
+    flash(`${name} swapped boards with you`)
+  }
+
+  // Take over someone's board: their word, rows, colours and frozen rows. Marks are worked out here, not trusted.
+  function take(b: Board, from: string) {
+    const m = mp.current, words = WORDS[m.S.lang]
+    if (!words.valid.has(b.answer) || !b.rows.every(w => words.valid.has(w))) return
+    const next = b.rows.map(word => ({ word, marks: score(word, b.answer) })), st = stats.current, keys: Record<string, Mark> = {}
+    st.greens = new Set()
+    st.found = new Set()
+    st.guesses = next.length
+    for (const row of next)
+      row.marks.forEach((x, i) => {
+        if (x === 'correct') st.greens.add(i)
+        if (x !== 'absent') st.found.add(row.word[i])
+        keys[row.word[i]] = best(keys[row.word[i]], x)
+      })
+    m.locked = Math.min(b.sealed, m.S.rows - 1 - m.dusk - next.length)
+    m.sealed = m.dusk + m.locked
+    setSealed(m.sealed)
+    setAnswer(b.answer)
+    setRows(next)
+    setKeys(keys)
+    setCur('')
+    setShown(COLS)
+    setSquat({})
+    setHint(null)
+    setFaded(0)
+    charge(energyOf(st))
+    snd.current.setTension(tensionOf(st.greens.size, m.S.rows - m.sealed - next.length))
+    const el = panelEls.current[from]
+    if (el) fx.current.swap(center(board.current), center(el), hueOf(selfId), hueOf(from))
+    snd.current.swap()
   }
 
   // Hot potato: whoever holds it when its hidden fuse runs out takes 3 locks. Solving a word throws it at the leader.
@@ -785,6 +898,34 @@ export default function App() {
     const m = mp.current, a = panelEls.current[from]
     if (l.to === selfId) {
       if (a) fx.current.stream(center(a), center(board.current), hueOf(from), l.n)
+      const name = COLOURS[m.seats[from] ?? 0][0]
+      if (m.live && m.mirror) {
+        // Mirror shield: straight back where it came from
+        m.mirror = false
+        setGuard(guards())
+        net.current?.lock({ to: from, n: l.n })
+        setTimeout(() => {
+          fx.current.shield(false)
+          if (a) fx.current.bounce(center(board.current), center(a), hueOf(selfId))
+          snd.current.bounce()
+          flash(`bounced back at ${name}`)
+        }, 900)
+        return
+      }
+      const decoys = lit().filter(p => p.id !== from)
+      if (m.live && m.decoy && decoys.length) {
+        // Decoy: passed on to someone random
+        const to = decoys[Math.floor(Math.random() * decoys.length)].id, b = panelEls.current[to]
+        m.decoy--
+        setGuard(guards())
+        net.current?.lock({ to, n: l.n })
+        setTimeout(() => {
+          if (b) fx.current.stream(center(board.current), center(b), hueOf(from), l.n)
+          snd.current.decoy()
+          flash(`decoy! it went to ${COLOURS[m.seats[to] ?? 0][0]}`)
+        }, 900)
+        return
+      }
       if (m.live && !m.out && !m.done && !m.ended) {
         m.pending = Math.min(99, m.pending + l.n)
         m.from = [...m.from, ...Array(l.n).fill(from)]
@@ -845,7 +986,7 @@ export default function App() {
     return () => clearTimeout(id)
   }, [rig])
   const onLock = useEffectEvent(gotLock)
-  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'potato' ? catchPotato(e, from) : gotRig(e, from)))
+  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'potato' ? catchPotato(e, from) : e.k === 'rig' ? gotRig(e, from) : gotSwap(e, from)))
   useEffect(() => {
     if (!code) return
     const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
@@ -904,6 +1045,7 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if ((e.target as Element).closest?.('button') && (e.key === 'Enter' || e.key === ' ')) return // the focused button handles it
       const k = e.key === 'Enter' ? 'enter' : e.key === 'Backspace' ? 'back' : e.key.toLowerCase()
+      if (e.key === 'Escape') return setAim(-1)
       if (k === 'enter' || k === 'back' || /^[a-z1-3]$/.test(k)) {
         e.preventDefault()
         press(k)
@@ -974,7 +1116,7 @@ export default function App() {
       )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} potato={live && potato === id} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} potato={live && potato === id} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">

@@ -65,6 +65,7 @@ export class FX {
   awake = false
   // the square rim behind the board: a spring for its size, a flash, a light that can sweep around, a shake
   rim = { s: 0, v: 0, flash: 0, light: LIT, spin: 0, x: 0, xv: 0 }
+  guard = { on: false, k: 0 } // Mirror shield: a second, cooler frame with light racing round it
   buf = new Float32Array(MAX * STRIDE)
   n = 0
   ps: Particle[] = []
@@ -401,6 +402,38 @@ export class FX {
     this.wave(x, y, col, rarity === 'legendary' ? 0.7 : 0.3)
   }
 
+  // Decoy: a ghost of your board flickers out to one side and back.
+  decoy(b: Pt, hue: number) {
+    const col = hsl(hue, 0.8, 0.75)
+    for (const dx of [-1, 1])
+      for (let i = 0; i < 40 * this.q; i++) {
+        const y = b.y + rand(-140, 140)
+        this.add({ x: b.x, y, life: rand(0.6, 1), rgb: col, ...bit(0.8, 0.2, 2), align: true, path: [b.x + dx * rand(0, 40), y, b.x + dx * rand(160, 240), y + rand(-20, 20)] })
+      }
+    this.rim.xv += 160
+  }
+
+  shield(on: boolean) {
+    this.guard.on = on
+    if (on) this.poke(0.05, 0.8, 0.5)
+  }
+
+  // Mirror shield, hit: a bright ricochet back toward whoever sent it.
+  bounce(a: Pt, b: Pt, hue: number) {
+    this.burst(a.x, a.y, 70, { col: () => (Math.random() < 0.6 ? hsl(190, 0.9, 0.8) : WHITE), speed: [80, 420], life: [0.4, 1], sparks: 0.3, hot: 3 })
+    this.stream(a, b, hue, 2)
+    this.rim.xv -= 200
+    this.poke(0.06, 1)
+  }
+
+  // Swap: both boards pour into each other, and the frame spins.
+  swap(a: Pt, b: Pt, ha: number, hb: number) {
+    this.stream(a, b, ha, 3)
+    this.stream(b, a, hb, 3)
+    this.poke(0.06, 0.5, 1)
+    for (const p of [a, b]) this.wave(p.x, p.y, hsl(45, 1, 0.7), 0.6)
+  }
+
   // Thaw: frozen rows turn to warm droplets that fall away, and a warm wave washes the board.
   thaw(tiles: Tile[], b: Pt) {
     for (const t of tiles) {
@@ -561,6 +594,9 @@ export class FX {
     if (!b || !this.awake) return
     const k = (0.05 + 0.5 * this.energy ** 1.5) * (1 + this.glow * 0.25) + m.flash
     this.put(b.x + m.x, b.y, (b.ry * 1.3 * (1 + m.s)) / 0.9, 0, hsl(this.hue() + 10, 0.5, 0.75), k, 1, RIM, 0.04, m.light)
+    const g = this.guard
+    g.k += ((g.on ? 1 : 0) - g.k) * (1 - Math.exp(-dt * 3))
+    if (g.k > 0.01) this.put(b.x + m.x, b.y, (b.ry * 1.42 * (1 + m.s)) / 0.9, 0, hsl(190, 0.9, 0.78), g.k * (0.5 + 0.25 * Math.sin(this.time * 4)), 1, RIM, 0.05, this.time * 2.2)
   }
 
   // Waves nudge nearby light outward; the pointer gently parts it.

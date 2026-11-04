@@ -23,7 +23,9 @@ export type Me = { round: number; n: number; rows: string[]; typed: number; seal
 export type Lock = { to: string; n: number }
 // Everything else players do to each other: throwing the hot potato, rigging a word, using a skill.
 export type Potato = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
-export type Ev = Potato | { k: 'rig'; to: string; word: string }
+export type Board = { answer: string; rows: string[]; sealed: number }
+export type Swap = { k: 'swap'; to: string; reply: boolean; ok: boolean; bounced: boolean; board: Board | null }
+export type Ev = Potato | { k: 'rig'; to: string; word: string } | Swap
 type Hello = { v: number; since: number }
 
 type Obj = Record<string, unknown>
@@ -50,7 +52,10 @@ const id = (x: unknown) => typeof x === 'string' && x.length < 64
 const okEv = (e: unknown): e is Ev =>
   obj(e) && id(e.to) &&
   ((e.k === 'potato' && int(e.fuse, 0, 60000) && int(e.gen, 0, 1e6) && typeof e.boom === 'boolean') ||
-    (e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)))
+    (e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)) ||
+    (e.k === 'swap' && typeof e.reply === 'boolean' && typeof e.ok === 'boolean' && typeof e.bounced === 'boolean' && (e.board === null || okBoard(e.board))))
+const five = (w: unknown) => typeof w === 'string' && /^[a-z]{5}$/.test(w)
+const okBoard = (b: unknown) => obj(b) && five(b.answer) && Array.isArray(b.rows) && b.rows.length <= 7 && b.rows.every(five) && int(b.sealed, 0, 7)
 
 export type Handlers = {
   room(r: Room): void
@@ -123,7 +128,7 @@ export function connect(word: string, on: Handlers) {
     room: (r: Room) => void roomA.send(r),
     me: (m: Me) => void meA.send(m),
     lock: (l: Lock) => void lockA.send(l),
-    ev: (e: Ev) => void evA.send(e),
+    ev: (e: Ev, to?: string) => void evA.send(e, { target: to }),
     leave: () => void room.leave(),
   }
 }

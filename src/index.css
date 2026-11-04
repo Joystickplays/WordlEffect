@@ -940,3 +940,14 @@ canvas.fx {
   width: 14px;
   height: 14px;
 }
+
+/* Swap, aiming: every other board lights up to be picked */
+.panel.aimable {
+  cursor: crosshair;
+}
+.panel.aimable .board.peer {
+  outline: 1px dashed hsl(var(--h) 85% 70% / 0.7);
+  outline-offset: calc(var(--tile) * 0.15);
+  border-radius: calc(var(--tile) * 0.2);
+  animation: beckon var(--bar) ease-in-out infinite;
+}
