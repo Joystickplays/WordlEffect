@@ -88,7 +88,8 @@ export default function App() {
   const lobby = !!code && !live
   const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
   const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => room.seats[a] - room.seats[b]) : []
-  const side = (id: string) => (others.indexOf(id) % 2 ? 0.6 : -0.6) // panels alternate left and right
+  const boards = 1 + others.length, cols = boards <= 4 ? boards : Math.ceil(boards / 2)
+  const side = (id: string) => (cols > 1 ? -0.6 + (1.2 * ((others.indexOf(id) + 1) % cols)) / (cols - 1) : 0) // pan by which column their board is in
   const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
   const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
 
@@ -652,18 +653,9 @@ export default function App() {
     return () => removeEventListener('keydown', h)
   }, [])
 
-  const panels = (ids: string[], where: string) => (
-    <div className={`peers ${where}`}>
-      {ids.map(id => (
-        <Panel key={id} seat={room!.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} el={e => { panelEls.current[id] = e }} />
-      ))}
-    </div>
-  )
-
   return (
-    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
+    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit, '--cols': cols, '--brows': Math.ceil(boards / cols) } as CSSProperties}>
       <div className="stage">
-      {code && room && panels(others.filter((_, i) => i % 2 === 0), 'left')}
       <aside className="hud left">
         {lobby && room ? <Setup side="left" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Guess</small><b>{rows.length}<i>/{limit}</i></b></p>
@@ -671,6 +663,8 @@ export default function App() {
         <p><small>Light</small><Meter value={energy} /></p>
         </>}
       </aside>
+      <div className="boards">
+      <figure className="panel">
       <div className="board" ref={board} role="grid" aria-label="Guesses">
         {live && pending > 0 && (
           <div className="frostq" aria-label={`${pending} locks waiting`}>
@@ -695,6 +689,12 @@ export default function App() {
           )
         })}
       </div>
+      {code && room && selfId in room.seats && <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>you</figcaption>}
+      </figure>
+      {code && room && others.map(id => (
+        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} el={e => { panelEls.current[id] = e }} />
+      ))}
+      </div>
       <aside className="hud right">
         {lobby && room ? <Setup side="right" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Time</small><b>{clockText(Math.max(0, (live && room?.settings.mode === 'tide' ? room.settings.tide * 60 : 0) + (live && room?.settings.mode === 'tide' ? -1 : 1) * (clock.start ? Math.floor(((clock.end || clock.now) - clock.start) / 1000) : 0)))}</b></p>
@@ -706,7 +706,6 @@ export default function App() {
         )}
         </>}
       </aside>
-      {code && room && panels(others.filter((_, i) => i % 2 === 1), 'right')}
       </div>
 
       <div className="ghost" aria-hidden="true">

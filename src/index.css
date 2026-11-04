@@ -21,8 +21,14 @@ body {
 .app {
   --g: 93 255 192; /* aurora */
   --a: 255 192 97; /* ember */
-  --chrome: 290px; /* height taken by everything but the board */
-  --tile: min(64px, calc((100vw - 48px) / 5.6), calc((100dvh - var(--chrome)) / (var(--rows) * 1.12 + 0.18)));
+  --chrome: 290px; /* height taken by everything but the boards */
+  --side: 48px; /* width taken by everything but the boards */
+  /* every board is the same size: they share the width in --cols columns and the height in --brows rows */
+  --tile: min(
+    64px,
+    calc((100vw - var(--side)) / (var(--cols) * 5.6 + (var(--cols) - 1) * 0.7)),
+    calc((100dvh - var(--chrome)) / (var(--brows) * (var(--rows) * 1.12 + 0.18) + (var(--brows) - 1) * 0.9))
+  );
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -386,7 +392,7 @@ canvas.fx {
     grid-template-areas: 'l r' 'b b';
     row-gap: 12px;
   }
-  .board {
+  .boards {
     grid-area: b;
     justify-self: center;
   }
@@ -473,6 +479,13 @@ canvas.fx {
 }
 
 /* ——— playing together ——— */
+.app.together {
+  --side: 340px;
+  --chrome: 320px;
+}
+.app.together .stage {
+  max-width: none;
+}
 .app.together .hud {
   opacity: 1; /* the room's settings show from the start */
 }
@@ -525,21 +538,11 @@ canvas.fx {
   color: hsl(var(--h) 80% 72% / 0.8);
 }
 
-.stage:has(.peers) {
-  grid-template-columns: 1fr auto auto auto 1fr;
-  max-width: 1440px;
-}
-.peers {
+.boards {
   display: grid;
-  grid-template-columns: repeat(2, auto);
-  gap: 20px 16px;
-  align-content: center;
-}
-.peers.left {
-  justify-content: end;
-}
-.peers.right {
-  justify-content: start;
+  grid-template-columns: repeat(var(--cols), auto);
+  gap: calc(var(--tile) * 0.5) calc(var(--tile) * 0.7);
+  justify-content: center;
 }
 .panel {
   --h: 200;
@@ -547,54 +550,22 @@ canvas.fx {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   transition: opacity 2s, filter 2s;
 }
 .panel.out {
   opacity: 0.28;
   filter: grayscale(1);
 }
-.mini {
-  display: grid;
-  grid-template-columns: repeat(5, 9px);
-  gap: 2px;
-  padding: 5px;
-  border-radius: 5px;
-  border: 1px solid hsl(var(--h) 80% 70% / calc(0.14 + var(--pe) * 0.4));
-  box-shadow: 0 0 calc(4px + 22px * var(--pe)) hsl(var(--h) 90% 60% / calc(0.08 + var(--pe) * 0.4));
-  transition: box-shadow 1.2s, border-color 1.2s;
-}
-.mini i {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  border: 1px solid rgb(255 255 255 / 0.07);
-  transition: background-color 0.4s, box-shadow 0.6s;
-}
-.mini i.typed {
-  background: rgb(255 255 255 / 0.22);
-}
-.mini i.correct {
-  border-color: transparent;
-  background: rgb(var(--g) / 0.85);
-  box-shadow: 0 0 5px rgb(var(--g) / 0.8);
-}
-.mini i.present {
-  border-color: transparent;
-  background: rgb(var(--a) / 0.75);
-  box-shadow: 0 0 4px rgb(var(--a) / 0.6);
-}
-.mini i.absent {
-  background: rgb(255 255 255 / 0.04);
-}
-.mini i.sealed {
-  border-color: rgb(195 220 255 / 0.25);
-  background: rgb(195 220 255 / 0.14);
+/* someone else's board: the same glass tiles as yours, colours only, glowing in their hue as their world wakes */
+.board.peer {
+  filter: drop-shadow(0 0 calc(4px + 18px * var(--pe)) hsl(var(--h) 90% 60% / calc(0.1 + var(--pe) * 0.35)));
+  transition: filter 1.2s;
 }
 .panel figcaption {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.18em;
-  color: hsl(var(--h) 70% 75% / 0.65);
+  color: hsl(var(--h) 70% 75% / 0.7);
 }
 .panel .stars {
   color: hsl(var(--h) 90% 80%);
@@ -603,34 +574,10 @@ canvas.fx {
 
 @media (max-width: 640px) {
   .app.together {
-    --chrome: 430px;
-  }
-  .stage:has(.peers) {
-    grid-template-columns: 1fr 1fr;
-    grid-template-areas: 'pl pr' 'l r' 'b b';
-  }
-  .peers {
-    display: flex;
-    gap: 8px;
-  }
-  .peers.left {
-    grid-area: pl;
-  }
-  .peers.right {
-    grid-area: pr;
-  }
-  .mini {
-    grid-template-columns: repeat(5, 5px);
-    gap: 1px;
-    padding: 3px;
-  }
-  .mini i {
-    width: 5px;
-    height: 5px;
-    border-radius: 1px;
+    --side: 24px;
   }
   .panel figcaption {
-    font-size: 8px;
+    font-size: 9px;
   }
 }
 

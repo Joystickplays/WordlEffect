@@ -51,17 +51,20 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
   )
 }
 
-// Someone else's board: colours only, never letters, glowing in their hue as their world wakes.
+// Someone else's board, the same size as yours: colours only, never letters.
 export function Panel({ seat, snap, rows, el }: { seat: number; snap?: Me; rows: number; el: (e: HTMLElement | null) => void }) {
   const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
     <figure ref={el} className={`panel ${snap?.out ? 'out' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0 } as CSSProperties}>
-      <div className="mini" aria-hidden="true">
-        {Array.from({ length: rows * 5 }, (_, i) => {
-          const r = Math.floor(i / 5), c = i % 5, m = marks[r]?.[c] as keyof typeof MARK | undefined
-          const cls = r >= rows - sealed ? 'sealed' : m ? MARK[m] : r === marks.length && c < (snap?.typed ?? 0) ? 'typed' : ''
-          return <i key={i} className={cls} />
-        })}
+      <div className="board peer" aria-hidden="true">
+        {Array.from({ length: rows }, (_, r) => (
+          <div key={r} className={`row ${r >= rows - sealed ? 'sealed' : ''}`}>
+            {Array.from({ length: 5 }, (_, c) => {
+              const m = marks[r]?.[c] as keyof typeof MARK | undefined
+              return <div key={c} className={`tile ${m ? `filled ${MARK[m]}` : r === marks.length && c < (snap?.typed ?? 0) ? 'filled' : ''}`} />
+            })}
+          </div>
+        ))}
       </div>
       <figcaption>
         {name}
