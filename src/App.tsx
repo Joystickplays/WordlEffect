@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { ANSWERS, VALID } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock } from './net.ts'
@@ -17,7 +17,7 @@ const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, s
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
 const freshMatch = () => ({
   live: false, round: 0, S: DEFAULTS, seats: {} as Record<string, number>, order: [] as number[], n: 0, start: 0,
-  score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[],
+  score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[], claim: 0,
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
@@ -75,6 +75,8 @@ export default function App() {
   const [line, setLine] = useState('') // the one quiet line of text under the board
   const [live, setLive] = useState(false) // a match is being played
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
+  const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
+  const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
   const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
@@ -87,6 +89,7 @@ export default function App() {
   const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
   const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => room.seats[a] - room.seats[b]) : []
   const side = (id: string) => (others.indexOf(id) % 2 ? 0.6 : -0.6) // panels alternate left and right
+  const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
   const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
 
   useEffect(() => {
@@ -143,7 +146,9 @@ export default function App() {
   }, [clock.start, clock.end])
 
   const earn = (n: number) => {
-    if (mp.current.live) mp.current.score += n
+    const m = mp.current
+    if (m.live) n = Math.round(n * trialBonus([...m.S.trials.toString(2)].filter(b => b === '1').length)) // harder rooms score higher
+    if (m.live) m.score += n
     setPoints(p => p + n)
     setTotal(p => p + n)
   }
@@ -188,6 +193,11 @@ export default function App() {
 
   function submit() {
     if (cur.length < COLS || !VALID.has(cur)) return refuse(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
+    if (trial('strict') && strictBreak(cur, rows)) {
+      refuse('Keep the letters you found')
+      return flash('keep the light you found')
+    }
+    setLate(false)
     const r = rows.length, word = cur, marks = score(word, answer), s = stats.current
     const chain = chains(marks), isNew = marks.map((m, i) => m === 'correct' && !s.greens.has(i))
     s.guesses++
@@ -241,12 +251,19 @@ export default function App() {
     if (won) finish('won', r)
     else if (r + 1 >= rowsAll - m.sealed) finish('lost', r)
     else setPhase(m.ended ? 'over' : 'play')
+    if (m.live && has(m.S, 'fading')) {
+      const word = `${m.round}:${m.n}`
+      snd.current.at(snd.current.now() + 2 * BAR, () => `${mp.current.round}:${mp.current.n}` === word && setFaded(f => Math.max(f, r + 1)))
+    }
   }
 
   function finish(res: 'won' | 'lost', r: number) {
     const m = mp.current
     setResult(res)
     if (!m.live) setClock(c => ({ ...c, end: Date.now() }))
+    if (m.live && res === 'won' && m.S.mode === 'stars') m.stars = [...m.stars, performance.now() - m.start]
+    // heavy frost carries this word's locked rows into the next one; a solve in 3 or fewer thaws one
+    m.carry = has(m.S, 'frost') ? Math.max(0, m.locked - (res === 'won' && r < 3 ? 1 : 0)) : 0
     const t = snd.current.grid(BEAT)
     if (res === 'won') {
       earn(winBonus(r + 1))
@@ -293,6 +310,8 @@ export default function App() {
     setStreak(stats.current.streak)
     setPoints(0)
     setFlare(false)
+    setFaded(0)
+    setLate(false)
     if (keep) {
       fx.current.setStreak(stats.current.streak)
       snd.current.setStreak(stats.current.streak)
@@ -415,9 +434,9 @@ export default function App() {
     const m = mp.current
     // dusk: in Last light, every 3 minutes every board loses a row for good, down to 3, so matches always end
     const dusk = m.S.mode === 'light' ? Math.min(m.S.rows - 3, Math.floor((performance.now() - m.start) / 180000)) : 0
-    m.locked = 0
-    m.sealed = dusk
-    setSealed(dusk)
+    m.locked = Math.min(m.carry, m.S.rows - 1 - dusk)
+    m.sealed = dusk + m.locked
+    setSealed(m.sealed)
     restart(ANSWERS[m.order[m.n % m.order.length]], true)
   }
 
@@ -428,7 +447,7 @@ export default function App() {
       m.out = true
       setLine('your light rests')
     }
-    if (m.out || m.done || m.ended) {
+    if (m.out || m.done || m.ended || (m.S.mode === 'stars' && m.stars.length >= m.S.stars)) {
       setPhase('over')
       net.current?.me(snapshot())
       return checkEnd()
@@ -453,13 +472,21 @@ export default function App() {
       const lit = all.filter(p => !p.out)
       if (lit.length <= 1) end(lit[0]?.id ?? [...all].sort((a, b) => b.score - a.score)[0].id)
     } else if (m.S.mode === 'tide' && all.every(p => p.done)) end([...all].sort((a, b) => b.score - a.score)[0].id)
+    else if (m.S.mode === 'stars' && !m.claim && all.some(p => p.stars.length >= m.S.stars)) {
+      // wait a moment for close finishes to arrive, then the earliest time wins; everyone does the same sum
+      m.claim = window.setTimeout(() => {
+        if (mp.current !== m || m.ended) return
+        const k = m.S.stars - 1, done = players().filter(p => p.stars.length > k)
+        end(done.sort((a, b) => a.stars[k] - b.stars[k] || (a.id < b.id ? -1 : 1))[0].id)
+      }, 1000)
+    }
   }
 
   function end(winner: string) {
     const m = mp.current, name = COLOURS[m.seats[winner] ?? 0][0], mine = winner === selfId
     m.ended = true
     const rank = players().sort((a, b) => (a.id === winner ? -1 : b.id === winner ? 1 : b.score - a.score))
-    const words = { light: mine ? 'last light' : `${name} shone longest`, tide: 'the tide is out', stars: mine ? 'three stars' : `${name} reached them first` }
+    const words = { light: mine ? 'last light' : `${name} shone longest`, tide: 'the tide is out', stars: mine ? (m.S.stars === 3 ? 'three stars' : 'five stars') : `${name} reached them first` }
     setEnded({ line: words[m.S.mode], rank })
     setCur('')
     setPhase('over')
@@ -582,6 +609,34 @@ export default function App() {
     }
   }, [])
 
+  // Undertow trial: each guess gets 8 bars. Past that, a row freezes; on the last row, the word is lost.
+  const hurry = useEffectEvent(() => {
+    setLate(true)
+    snd.current.setTension(1)
+  })
+  const expire = useEffectEvent(() => {
+    const m = mp.current, r = rows.length
+    if (phase !== 'play' || !m.live) return
+    setLate(false)
+    if (m.S.rows - m.sealed - r > 1) {
+      seal(1, false)
+      say('The undertow took a row')
+    } else {
+      setCur('')
+      setPhase('busy')
+      finish('lost', r - 1)
+    }
+  })
+  const undertow = trial('undertow') && phase === 'play' && !ended
+  useEffect(() => {
+    if (!undertow) return
+    const a = setTimeout(() => hurry(), 6 * BAR * 1000), b = setTimeout(() => expire(), 8 * BAR * 1000)
+    return () => {
+      clearTimeout(a)
+      clearTimeout(b)
+    }
+  }, [undertow, rows.length, sealed, answer])
+
   const press = useEffectEvent(onKey)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -606,7 +661,7 @@ export default function App() {
   )
 
   return (
-    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
+    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
       <div className="stage">
       {code && room && panels(others.filter((_, i) => i % 2 === 0), 'left')}
       <aside className="hud left">
@@ -628,9 +683,10 @@ export default function App() {
             <div key={r} role="row" ref={el => { rowEls.current[r] = el! }} className={`row ${result === 'won' && r !== rows.length - 1 ? 'dim' : ''} ${flare && r === rows.length - 1 ? 'flare' : ''} ${r >= limit - sealed ? 'sealed' : ''}`}>
               {Array.from({ length: COLS }, (_, c) => {
                 const mark = row && (r < rows.length - 1 || c < shown) ? row.marks[c] : ''
+                const drain = trial('fading') && r < faded
                 const caret = phase === 'play' && r === rows.length && c === cur.length
                 return (
-                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c] ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''}`}>
+                  <div key={c} role="gridcell" ref={el => { tileEls.current[r * COLS + c] = el! }} className={`tile ${word[c] ? 'filled' : ''} ${mark} ${caret ? 'caret' : ''} ${drain ? 'drain' : ''}`}>
                     {word[c] && <span key={word[c]}>{word[c]}</span>}
                   </div>
                 )
@@ -643,7 +699,11 @@ export default function App() {
         {lobby && room ? <Setup side="right" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
         <p><small>Time</small><b>{clockText(Math.max(0, (live && room?.settings.mode === 'tide' ? room.settings.tide * 60 : 0) + (live && room?.settings.mode === 'tide' ? -1 : 1) * (clock.start ? Math.floor(((clock.end || clock.now) - clock.start) / 1000) : 0)))}</b></p>
         <p><small>Score</small><b><Tally value={scored} /></b></p>
-        <p><small>Total</small><b><Tally value={total} /></b></p>
+        {live && room?.settings.mode === 'stars' ? (
+          <p><small>Stars</small><b>{mp.current.stars.length}<i>/{room.settings.stars}</i></b></p>
+        ) : (
+          <p><small>Total</small><b><Tally value={total} /></b></p>
+        )}
         </>}
       </aside>
       {code && room && panels(others.filter((_, i) => i % 2 === 1), 'right')}
@@ -685,7 +745,7 @@ export default function App() {
                 <button
                   key={k}
                   aria-label={k === 'enter' ? 'Enter' : k === 'back' ? 'Delete' : k}
-                  className={`key ${keys[k] || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
+                  className={`key ${(!trial('fading') && keys[k]) || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => onKey(k)}
                 >

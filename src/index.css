@@ -649,3 +649,31 @@ canvas.fx {
   font-weight: 600;
   color: rgb(235 242 255 / 0.85);
 }
+
+/* Fading trial: a checked row drains back to clear glass, like an afterimage */
+.tile.drain.correct,
+.tile.drain.present,
+.tile.drain.absent {
+  color: rgb(255 255 255 / 0.92);
+  border-color: rgb(255 255 255 / 0.3);
+  box-shadow: 0 0 14px rgb(160 180 255 / 0.08);
+  text-shadow: none;
+  transition: border-color 3s, box-shadow 3s, color 3s, text-shadow 3s;
+}
+.tile.drain::before {
+  opacity: 0;
+  animation: drain 3s ease-out;
+}
+.tile.drain::after {
+  display: none;
+}
+@keyframes drain {
+  from {
+    opacity: 1;
+  }
+}
+/* Undertow trial: the caret dims as the clock runs out */
+.app.late .tile.caret::after {
+  opacity: 0.2;
+  animation-duration: calc(var(--bar) / 4);
+}
