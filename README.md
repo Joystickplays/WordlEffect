@@ -104,10 +104,45 @@ Up to 8 people, peer to peer, with no server of ours in the middle.
 | Tide | A timed race (3, 5 or 10 minutes). Highest score wins. |
 | Stars | First to solve 3 words (or 5) wins. |
 
+### Teams
+
+The **Versus** setting decides who plays whom:
+
+| Versus | Who plays whom |
+| --- | --- |
+| Everyone | Each player for themselves. |
+| Teams | Two teams, **dawn** and **dusk**. Newcomers join the smaller team, and you can switch sides in the lobby. |
+| Echoes | Everyone is one team, against the same number of **echoes**: bots that play alongside you. |
+
+In both team versions:
+
+- **Team score.** A team's score is its players' points added together, shown as two totals with a tug-of-war bar.
+- **Winning.** The mode still decides: the higher total when the tide runs out, the first team to collect
+  stars-to-win × team-size stars, or the last team with someone still lit.
+- **Locks.** They only fly at the other team. Locks you earn first melt your teammate's waiting ones.
+- **Jinx** doesn't count between teammates.
+
+**Echoes:**
+
+- Each echo is a pale, dashed twin of one player ("rose's echo"), seated under them.
+- They play the same words with the same scoring, and feel locks and dusk like anyone.
+- The letters they find sound an octave lower.
+- They run in the host's browser. If the host leaves, they stop.
+- **Echoes** sets how hard they are:
+
+| Echoes | How they play |
+| --- | --- |
+| Gentle | Slow, sometimes careless. About 70 seconds a word. |
+| Even | Steady, and never wastes a guess. About 40 seconds a word. |
+| Fierce | Quick, and picks the most telling word. About 25 seconds a word. |
+
+With echoes on, one player can start a room alone and play a single echo.
+
 ### Room settings
 
 Whoever made the room sets these in the lobby: the mode, rows per board (4 to 8), locks (off, gentle, fierce),
-the language (English or Indonesian), seats (2 to 8), skills (on or off) and any of the trials below. Each trial
+the language (English or Indonesian), who plays whom (everyone, teams or echoes), seats (2 to 8, or up to 4
+against echoes), skills (on or off) and any of the trials below. Each trial
 that's on multiplies your points by 1.25. Every mode and trial has a small (i) that explains it.
 
 | Trial | What changes |
@@ -191,6 +226,7 @@ the piano. Though, any other sample works just fine offline since they're synthe
 | [`src/audio.ts`](src/audio.ts) | The music: piano sampler, synths, reverb, echo, the beat grid and the drone |
 | [`src/net.ts`](src/net.ts) | Playing together: rooms, the host, and checking every message from other players |
 | [`src/Room.tsx`](src/Room.tsx) | Room settings and the other players' panels |
+| [`src/echoes.ts`](src/echoes.ts) | The echoes: bots that think, type and reveal, run by the host |
 | [`src/skills.ts`](src/skills.ts) | The six skills: names, what they do, and how often the reel lands on each |
 | [`src/words.ts`](src/words.ts) | English and Indonesian answers and guesses ([`valid.txt`](src/valid.txt), [`id/`](src/id/NOTICE.md)) |
 | [`src/index.css`](src/index.css) | Tiles, keyboard, HUD and their animations |
@@ -215,6 +251,7 @@ A few details worth knowing:
 - Random word each round, no daily puzzle or saved stats.
 - HDR in Safari isn't confirmed yet (see [HDR](#hdr)).
 - Playing together needs WebRTC, which some VPNs and networks block (see [Good to know](#good-to-know)).
+- Echoes live in the host's browser: if the host leaves mid-match, the echoes stop.
 
 ## Planned
 
