@@ -951,3 +951,34 @@ canvas.fx {
   border-radius: calc(var(--tile) * 0.2);
   animation: beckon var(--bar) ease-in-out infinite;
 }
+
+@media (max-width: 640px) {
+  /* the lobby's settings stack above the board, and the trials wrap across the screen */
+  .app.lobby {
+    --chrome: 540px;
+  }
+  .app.lobby .stage {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'l' 'r' 'b';
+  }
+  .app.lobby .hud {
+    flex-wrap: wrap;
+    justify-content: center !important;
+    row-gap: 10px;
+  }
+  .app.lobby .hud p {
+    align-items: center !important;
+  }
+  .trials {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 12px;
+  }
+  .trials span {
+    white-space: nowrap;
+  }
+  .app.lobby .hud.right p:first-child {
+    flex-basis: 100%;
+  }
+}

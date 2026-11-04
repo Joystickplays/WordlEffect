@@ -1056,7 +1056,7 @@ export default function App() {
   }, [])
 
   return (
-    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit, '--cols': cols, '--brows': Math.ceil(boards / cols) } as CSSProperties}>
+    <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${lobby ? 'lobby' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit, '--cols': cols, '--brows': Math.ceil(boards / cols) } as CSSProperties}>
       <div className="stage">
       <aside className="hud left">
         {lobby && room ? <Setup side="left" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
