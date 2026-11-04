@@ -402,6 +402,12 @@ export class FX {
     this.wave(x, y, col, rarity === 'legendary' ? 0.7 : 0.3)
   }
 
+  // Teams: a warm stream of light from one teammate to another, melting their frost.
+  melt(a: Pt, b: Pt) {
+    this.stream(a, b, 32, 2)
+    setTimeout(() => this.burst(b.x, b.y, 40, { col: () => (Math.random() < 0.6 ? hsl(35, 1, 0.72) : ICE), speed: [30, 200], life: [0.6, 1.4], grav: 120, sparks: 0.2 }), 1000)
+  }
+
   // Decoy: a ghost of your board flickers out to one side and back.
   decoy(b: Pt, hue: number) {
     const col = hsl(hue, 0.8, 0.75)

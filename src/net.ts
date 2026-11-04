@@ -26,7 +26,7 @@ export type Lock = { to: string; n: number }
 // Everything else players do to each other: rigging a word, swapping boards.
 export type Board = { answer: string; rows: string[]; sealed: number }
 export type Swap = { k: 'swap'; to: string; reply: boolean; ok: boolean; bounced: boolean; board: Board | null }
-export type Ev = { k: 'rig'; to: string; word: string } | Swap | { k: 'side'; to: string; side: number }
+export type Ev = { k: 'rig'; to: string; word: string } | Swap | { k: 'side'; to: string; side: number } | { k: 'melt'; to: string; n: number }
 type Hello = { v: number; since: number }
 
 type Obj = Record<string, unknown>
@@ -57,6 +57,7 @@ const okEv = (e: unknown): e is Ev =>
   obj(e) && id(e.to) &&
   ((e.k === 'rig' && typeof e.word === 'string' && /^[a-z]{5}$/.test(e.word)) ||
     (e.k === 'side' && int(e.side, 0, 1)) ||
+    (e.k === 'melt' && int(e.n, 1, 6)) ||
     (e.k === 'swap' && typeof e.reply === 'boolean' && typeof e.ok === 'boolean' && typeof e.bounced === 'boolean' && (e.board === null || okBoard(e.board))))
 const five = (w: unknown) => typeof w === 'string' && /^[a-z]{5}$/.test(w)
 const okBoard = (b: unknown) => obj(b) && five(b.answer) && Array.isArray(b.rows) && b.rows.length <= 7 && b.rows.every(five) && int(b.sealed, 0, 7)

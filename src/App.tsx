@@ -3,7 +3,7 @@ import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, balance, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
+import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
 import { Setup, Panel, Which, Icon } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 
@@ -125,6 +125,8 @@ export default function App() {
   // who can start: two or more, one on each side for teams, and one is enough against the echoes
   const ready = !room ? false : room.settings.versus === 'echoes' ? seated >= 1 : room.settings.versus === 'teams' ? [0, 1].every(t => here.some(id => teamOf(id) === t)) : seated >= 2
   const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
+  // team totals, for the HUD: your own score plus everyone else's latest
+  const score2 = [0, 1].map(t => (teams ? (teamOf(selfId) === t ? total : 0) + others.filter(id => teamOf(id) === t).reduce((s, id) => s + (snaps[id]?.round === mp.current.round ? snaps[id].score : 0), 0) : 0))
   const TEAM_NAMES = room?.settings.versus === 'echoes' ? ['team', 'echoes'] : ['dawn', 'dusk']
   const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
 
@@ -465,6 +467,12 @@ export default function App() {
     checkEnd()
   }
 
+  // The host changes a setting: always on top of the latest room.
+  function setUp(f: (s: Settings) => Partial<Settings>) {
+    const r = roomRef.current
+    if (r) publish(seat({ ...r, settings: { ...r.settings, ...f(r.settings) } }, peersRef.current))
+  }
+
   // Switching sides: ask the host, who keeps the teams within one player of each other.
   function switchSide() {
     const r = roomRef.current
@@ -544,7 +552,7 @@ export default function App() {
       m.out = true
       setLine('your light rests')
     }
-    if (m.out || m.done || m.ended || (m.S.mode === 'stars' && m.stars.length >= m.S.stars)) {
+    if (m.out || m.done || m.ended || (m.S.mode === 'stars' && tm(selfId) < 0 && m.stars.length >= m.S.stars)) {
       setPhase('over')
       net.current?.me(snapshot())
       return checkEnd()
@@ -556,10 +564,15 @@ export default function App() {
 
   // Rigged: after each of your words, if you're in last place, you choose the leader's next word from three nasty ones.
   function offerRig() {
-    const m = mp.current, others = lit(), snaps = snapsRef.current
+    const m = mp.current, others = foes(), snaps = snapsRef.current
     if (!has(m.S, 'rigged') || !others.length) return
     const lead = target(others)!
-    if (lead.score <= m.score || others.some(p => p.score < m.score) || snaps[lead.id]?.rigged) return
+    if (tm(selfId) >= 0) {
+      // teams: the trailing team's lowest scorer picks for the leading team's top scorer
+      const [ours, theirs] = [tm(selfId), 1 - tm(selfId)].map(t => players().filter(p => tm(p.id) === t))
+      const sum = (ps: { score: number }[]) => ps.reduce((s, p) => s + p.score, 0)
+      if (sum(ours) >= sum(theirs) || ours.some(p => p.id !== selfId && p.score < m.score) || snaps[lead.id]?.rigged) return
+    } else if (lead.score <= m.score || others.some(p => p.score < m.score) || snaps[lead.id]?.rigged) return
     const pool = NASTY[m.S.lang], words = new Set<string>()
     while (words.size < 3) words.add(pool[Math.floor(Math.random() * pool.length)])
     setRig({ to: lead.id, words: [...words], until: Date.now() + 10000 })
@@ -596,6 +609,7 @@ export default function App() {
     const m = mp.current
     if (!m.live || m.ended) return
     const all = players()
+    if (tm(selfId) >= 0) return checkTeams(all)
     if (m.S.mode === 'light') {
       const lit = all.filter(p => !p.out)
       if (lit.length <= 1) end(lit[0]?.id ?? [...all].sort((a, b) => b.score - a.score)[0].id)
@@ -610,16 +624,48 @@ export default function App() {
     }
   }
 
+  // Teams: the mode decides how a team wins. Everyone does the same sum, so every screen names the same team.
+  function checkTeams(all: ReturnType<typeof players>) {
+    const m = mp.current, side = [0, 1].map(t => all.filter(p => tm(p.id) === t))
+    const sum = side.map(ps => ps.reduce((s, p) => s + p.score, 0)), lead = sum[0] === sum[1] ? -1 : sum[0] > sum[1] ? 0 : 1
+    if (m.S.mode === 'light') {
+      const lit = [0, 1].filter(t => side[t].some(p => !p.out))
+      if (lit.length <= 1) endTeam(lit[0] ?? lead)
+    } else if (m.S.mode === 'tide') {
+      if (all.every(p => p.done)) endTeam(lead)
+    } else if (!m.claim) {
+      const need = (t: number) => m.S.stars * side[t].length, got = (t: number) => side[t].flatMap(p => p.stars).sort((a, b) => a - b)
+      if ([0, 1].some(t => side[t].length && got(t).length >= need(t)))
+        m.claim = window.setTimeout(() => {
+          if (mp.current !== m || m.ended) return
+          const now = [0, 1].map(t => players().filter(p => tm(p.id) === t)), when = now.map(ps => (ps.length ? (ps.flatMap(p => p.stars).sort((a, b) => a - b)[m.S.stars * ps.length - 1] ?? Infinity) : Infinity))
+          endTeam(when[0] === when[1] ? -1 : when[0] < when[1] ? 0 : 1)
+        }, 1000)
+    }
+  }
+
+  function endTeam(t: number) {
+    const m = mp.current, mine = t >= 0 && t === tm(selfId), echoes = m.S.versus === 'echoes', names = echoes ? ['the team', 'the echoes'] : ['dawn', 'dusk']
+    const line = t < 0 ? 'even light' : echoes ? (t === 0 ? 'you outshone the echoes' : 'the echoes shone brighter') : `${names[t]} outshone ${names[1 - t]}`
+    const rank = players().sort((a, b) => (tm(a.id) === t ? 0 : 1) - (tm(b.id) === t ? 0 : 1) || b.score - a.score)
+    wrapUp(line, rank, mine, t < 0 ? 'The match is a tie' : `${names[t]} won the match`)
+  }
+
   function end(winner: string) {
     const m = mp.current, name = COLOURS[m.seats[winner] ?? 0][0], mine = winner === selfId
     m.ended = true
     const rank = players().sort((a, b) => (a.id === winner ? -1 : b.id === winner ? 1 : b.score - a.score))
     const words = { light: mine ? 'last light' : `${name} shone longest`, tide: 'the tide is out', stars: mine ? (m.S.stars === 3 ? 'three stars' : 'five stars') : `${name} reached them first` }
-    setEnded({ line: words[m.S.mode], rank })
+    wrapUp(words[m.S.mode], rank, mine, mine ? 'You won the match' : `${name} won the match`)
+  }
+
+  function wrapUp(line: string, rank: { id: string; score: number }[], mine: boolean, words: string) {
+    mp.current.ended = true
+    setEnded({ line, rank })
     setCur('')
     setPhase('over')
     setClock(c => ({ ...c, end: Date.now() }))
-    say(mine ? 'You won the match' : `${name} won the match`)
+    say(words)
     if (mine) {
       snd.current.win(snd.current.grid(BEAT), answer)
       fx.current.supernova(1.2)
@@ -748,7 +794,7 @@ export default function App() {
       return flash('click a board to swap with, or press again for the leader')
     }
     setAim(-1)
-    const to = at ?? target(lit())?.id
+    const to = at ?? target(foes())?.id
     if (!to || phase !== 'play' || free <= 1 || m.swap) return snd.current.invalid()
     m.swap = to
     setPhase('busy')
@@ -833,6 +879,11 @@ export default function App() {
     snd.current.swap()
   }
 
+  // In teams, only the other team can be aimed at.
+  const tm = (id: string) => teamIn(roomRef.current, id)
+  const foes = (exclude = selfId) => lit(exclude).filter(p => tm(p.id) < 0 || tm(p.id) !== tm(selfId))
+  const teammates = () => lit().filter(p => tm(p.id) >= 0 && tm(p.id) === tm(selfId))
+
   // Everyone else still playing this match, with their scores.
   function lit(exclude = selfId) {
     const m = mp.current, snaps = snapsRef.current
@@ -863,7 +914,7 @@ export default function App() {
   // Jinx: you and someone else guessed the same word on the same word number. You both lose a row.
   function jinx(id: string, h: number, used: number) {
     const m = mp.current, key = `${id}:${h}`, el = panelEls.current[id]
-    if (!has(m.S, 'jinx') || m.jinxed.includes(key) || m.out || m.done || m.ended) return
+    if (!has(m.S, 'jinx') || m.jinxed.includes(key) || m.out || m.done || m.ended || (tm(id) >= 0 && tm(id) === tm(selfId))) return // teammates can't jinx
     m.jinxed = [...m.jinxed, key]
     const name = COLOURS[m.seats[id] ?? 0][0]
     flash(`jinx! · ${name}`)
@@ -875,12 +926,32 @@ export default function App() {
 
   // Send locks to the brightest other player still lit.
   function fire(n: number) {
-    const to = target(lit())?.id
+    // teams shield each other first: what you earn melts your most-frosted teammate's waiting locks
+    const snaps = snapsRef.current, frosted = teammates().filter(p => snaps[p.id]?.pending).sort((a, b) => snaps[b.id].pending - snaps[a.id].pending)[0]
+    if (frosted) {
+      const k = Math.min(n, snaps[frosted.id].pending), el = panelEls.current[frosted.id]
+      net.current?.ev({ k: 'melt', to: frosted.id, n: k })
+      if (el) fx.current.melt(center(board.current), center(el))
+      n -= k
+      if (!n) return
+    }
+    const to = target(foes())?.id
     if (!to) return
     net.current?.lock({ to, n })
     const el = panelEls.current[to]
     if (el) fx.current.stream(center(board.current), center(el), hueOf(selfId), n)
     snd.current.launch(side(to))
+  }
+
+  function gotMelt(e: Extract<Ev, { k: 'melt' }>, from: string) {
+    const m = mp.current
+    if (e.to !== selfId || !m.live || tm(from) !== tm(selfId)) return
+    m.pending = Math.max(0, m.pending - e.n)
+    m.from = m.from.slice(-m.pending || m.from.length)
+    setPending(m.pending)
+    const el = panelEls.current[from]
+    if (el) fx.current.melt(center(el), center(board.current))
+    flash(`${COLOURS[m.seats[from] ?? 0][0]} melted your frost`)
   }
 
   // Locks in flight are drawn on every screen; only the target's board takes them.
@@ -902,7 +973,7 @@ export default function App() {
         }, 900)
         return
       }
-      const decoys = lit().filter(p => p.id !== from)
+      const decoys = foes().filter(p => p.id !== from)
       if (m.live && m.decoy && decoys.length) {
         // Decoy: passed on to someone random
         const to = decoys[Math.floor(Math.random() * decoys.length)].id, b = panelEls.current[to]
@@ -976,7 +1047,7 @@ export default function App() {
     return () => clearTimeout(id)
   }, [rig])
   const onLock = useEffectEvent(gotLock)
-  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : e.k === 'side' ? gotSide(e, from) : gotSwap(e, from)))
+  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : e.k === 'side' ? gotSide(e, from) : e.k === 'melt' ? gotMelt(e, from) : gotSwap(e, from)))
   useEffect(() => {
     if (!code) return
     const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
@@ -1049,7 +1120,7 @@ export default function App() {
     <main className={`app ${woke ? 'awake' : ''} ${code ? 'together' : ''} ${lobby ? 'lobby' : ''} ${late ? 'late' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit, '--cols': cols, '--brows': Math.ceil(boards / cols) } as CSSProperties}>
       <div className="stage">
       <aside className="hud left">
-        {lobby && room ? <Setup side="left" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
+        {lobby && room ? <Setup side="left" s={room.settings} set={host ? setUp : undefined} /> : <>
         <p><small>Guess</small><b>{rows.length}<i>/{limit}</i></b></p>
         <p><small>Streak</small><b>{streak ? `×${streak}` : '–'}</b></p>
         <p><small>Light</small><Meter value={energy} /></p>
@@ -1108,10 +1179,20 @@ export default function App() {
       ))}
       </div>
       <aside className="hud right">
-        {lobby && room ? <Setup side="right" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
+        {lobby && room ? <Setup side="right" s={room.settings} set={host ? setUp : undefined} /> : <>
         <p><small>Time</small><b>{clockText(Math.max(0, (live && room?.settings.mode === 'tide' ? room.settings.tide * 60 : 0) + (live && room?.settings.mode === 'tide' ? -1 : 1) * (clock.start ? Math.floor(((clock.end || clock.now) - clock.start) / 1000) : 0)))}</b></p>
         <p><small>Score</small><b><Tally value={scored} /></b></p>
-        {live && room?.settings.mode === 'stars' ? (
+        {live && teams ? (
+          <>
+            {[teamOf(selfId), 1 - teamOf(selfId)].map((t, i) => (
+              <p key={t} className={`side-${t}`}>
+                <small>{TEAM_NAMES[t]}</small>
+                <b><Tally value={score2[t]} /></b>
+                {i === 0 && <span className="tug" style={{ '--k': score2[t] + score2[1 - t] ? score2[t] / (score2[t] + score2[1 - t]) : 0.5 } as CSSProperties}><i /></span>}
+              </p>
+            ))}
+          </>
+        ) : live && room?.settings.mode === 'stars' ? (
           <p><small>Stars</small><b>{mp.current.stars.length}<i>/{room.settings.stars}</i></b></p>
         ) : (
           <p><small>Total</small><b><Tally value={total} /></b></p>
@@ -1132,7 +1213,7 @@ export default function App() {
       {ended && (
         <ol className="rank">
           {ended.rank.map(p => (
-            <li key={p.id} style={{ '--h': COLOURS[room?.seats[p.id] ?? 0][1] } as CSSProperties}>
+            <li key={p.id} className={teams ? `side-${teamOf(p.id)}` : ''} style={{ '--h': COLOURS[room?.seats[p.id] ?? 0][1] } as CSSProperties}>
               {p.id === selfId ? 'you' : COLOURS[room?.seats[p.id] ?? 0][0]} <b>{p.score.toLocaleString('en-US')}</b>
             </li>
           ))}

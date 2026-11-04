@@ -68,17 +68,18 @@ function Choice({ label, value, onClick, about }: { label: string; value: string
   )
 }
 
-// Only the host gets `set`; everyone else sees the same values, unclickable.
-export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; set?: (s: Settings) => void }) {
-  const ch = (patch: Partial<Settings>) => set && (() => set({ ...s, ...patch }))
+// Only the host gets `set`; everyone else sees the same values, unclickable. Changes are worked out from the
+// latest settings, not these props, so quick clicks never undo each other.
+export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; set?: (f: (s: Settings) => Partial<Settings>) => void }) {
+  const ch = (f: (s: Settings) => Partial<Settings>) => set && (() => set(f))
   if (side === 'left')
     return (
       <>
-        <Choice label="Mode" value={MODE_NAMES[s.mode]} onClick={ch({ mode: after(MODES, s.mode) })} about={s.mode} />
-        <Choice label="Rows" value={s.rows} onClick={ch({ rows: s.rows === 8 ? 4 : s.rows + 1 })} />
-        <Choice label="Locks" value={LOCKS[s.locks]} onClick={ch({ locks: (s.locks + 1) % 3 })} />
-        <Choice label="Words" value={s.lang === 'en' ? 'English' : 'Indonesian'} onClick={ch({ lang: s.lang === 'en' ? 'id' : 'en' })} />
-        <Choice label="Versus" value={VERSUS[s.versus]} onClick={ch({ versus: after(['all', 'teams', 'echoes'] as const, s.versus) })} about="versus" />
+        <Choice label="Mode" value={MODE_NAMES[s.mode]} onClick={ch(cur => ({ mode: after(MODES, cur.mode) }))} about={s.mode} />
+        <Choice label="Rows" value={s.rows} onClick={ch(cur => ({ rows: cur.rows === 8 ? 4 : cur.rows + 1 }))} />
+        <Choice label="Locks" value={LOCKS[s.locks]} onClick={ch(cur => ({ locks: (cur.locks + 1) % 3 }))} />
+        <Choice label="Words" value={s.lang === 'en' ? 'English' : 'Indonesian'} onClick={ch(cur => ({ lang: cur.lang === 'en' ? 'id' : 'en' }))} />
+        <Choice label="Versus" value={VERSUS[s.versus]} onClick={ch(cur => ({ versus: after(['all', 'teams', 'echoes'] as const, cur.versus) }))} about="versus" />
       </>
     )
   return (
@@ -90,7 +91,7 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
             const on = !!(s.trials & (1 << i))
             return (
               <span key={t}>
-                <button className={on ? 'on' : ''} aria-pressed={on} disabled={!set} onMouseDown={still} onClick={() => set?.({ ...s, trials: s.trials ^ (1 << i) })}>
+                <button className={on ? 'on' : ''} aria-pressed={on} disabled={!set} onMouseDown={still} onClick={() => set?.(cur => ({ trials: cur.trials ^ (1 << i) }))}>
                   {t}
                 </button>
                 <Info about={t} />
@@ -99,10 +100,10 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
           })}
         </span>
       </p>
-      <Choice label="Skills" value={s.skills ? 'on' : 'off'} onClick={ch({ skills: !s.skills })} about="skills" />
-      <Choice label="Seats" value={s.seats} onClick={ch({ seats: s.seats === 8 ? 2 : s.seats + 1 })} />
-      {s.mode === 'tide' && <Choice label="Length" value={`${s.tide} min`} onClick={ch({ tide: after([3, 5, 10], s.tide) })} />}
-      {s.mode === 'stars' && <Choice label="Stars" value={s.stars} onClick={ch({ stars: s.stars === 3 ? 5 : 3 })} />}
+      <Choice label="Skills" value={s.skills ? 'on' : 'off'} onClick={ch(cur => ({ skills: !cur.skills }))} about="skills" />
+      <Choice label="Seats" value={s.seats} onClick={ch(cur => ({ seats: cur.seats === 8 ? 2 : cur.seats + 1 }))} />
+      {s.mode === 'tide' && <Choice label="Length" value={`${s.tide} min`} onClick={ch(cur => ({ tide: after([3, 5, 10], cur.tide) }))} />}
+      {s.mode === 'stars' && <Choice label="Stars" value={s.stars} onClick={ch(cur => ({ stars: cur.stars === 3 ? 5 : 3 }))} />}
     </>
   )
 }
