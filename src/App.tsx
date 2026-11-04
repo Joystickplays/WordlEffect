@@ -75,6 +75,7 @@ export default function App() {
   const [line, setLine] = useState('') // the one quiet line of text under the board
   const [live, setLive] = useState(false) // a match is being played
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
+  const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
@@ -122,9 +123,22 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', sync)
   }, [])
 
+  // Tide: when the time is up, you stop; the match ends once everyone has.
+  const tideCheck = useEffectEvent(() => {
+    const m = mp.current
+    if (!m.live || m.S.mode !== 'tide' || m.done || m.ended || !m.start || performance.now() - m.start < m.S.tide * 60000) return
+    m.done = true
+    setCur('')
+    if (phase === 'play') setPhase('over')
+    net.current?.me(snapshot())
+    checkEnd()
+  })
   useEffect(() => {
     if (!clock.start || clock.end) return
-    const id = setInterval(() => setClock(c => ({ ...c, now: Date.now() })), 250)
+    const id = setInterval(() => {
+      setClock(c => ({ ...c, now: Date.now() }))
+      tideCheck()
+    }, 250)
     return () => clearInterval(id)
   }, [clock.start, clock.end])
 
@@ -143,7 +157,11 @@ export default function App() {
   function onKey(k: string) {
     if (snd.current.wake()) fx.current.wake()
     if (!woke) setWoke(true)
-    if (phase === 'over') return k === 'enter' && !code && restart()
+    if (phase === 'over') {
+      if (k === 'enter' && !code) restart()
+      else if (k === 'enter' && ended && host && roomRef.current) publish(seat({ ...roomRef.current, phase: 'lobby' }, peersRef.current))
+      return
+    }
     if (phase !== 'play') return
     // oxlint-disable-next-line react/purity -- onKey only ever runs from input events, never during render
     if (!clock.start && !code) setClock({ start: Date.now(), end: 0, now: Date.now() })
@@ -309,6 +327,7 @@ export default function App() {
   function leave() {
     mp.current = freshMatch()
     setLive(false)
+    setEnded(null)
     snapsRef.current = {}
     setSnaps({})
     setCode(null)
@@ -359,6 +378,7 @@ export default function App() {
     const playing = r && Object.keys(r.seats).some(id => (id === selfId ? mp.current.live : ids.includes(id)))
     if (h === selfId && r) publish(r.phase === 'lobby' || !playing ? seat({ ...r, phase: 'lobby' }, ids) : r)
     net.current?.me(snapshot()) // newcomers need to see us too
+    checkEnd()
   }
 
   function lobbyEnter() {
@@ -375,6 +395,7 @@ export default function App() {
     const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, ANSWERS.length) })
     restart()
     setLive(true)
+    setEnded(null)
     setPending(0)
     setPhase('busy')
     setTotal(0)
@@ -392,22 +413,69 @@ export default function App() {
 
   function nextWord() {
     const m = mp.current
-    m.sealed = m.locked = 0
-    setSealed(0)
+    // dusk: in Last light, every 3 minutes every board loses a row for good, down to 3, so matches always end
+    const dusk = m.S.mode === 'light' ? Math.min(m.S.rows - 3, Math.floor((performance.now() - m.start) / 180000)) : 0
+    m.locked = 0
+    m.sealed = dusk
+    setSealed(dusk)
     restart(ANSWERS[m.order[m.n % m.order.length]], true)
   }
 
   function advance(won: boolean) {
     const m = mp.current
     if (!m.live) return
-    void won
+    if (m.S.mode === 'light' && !won) {
+      m.out = true
+      setLine('your light rests')
+    }
+    if (m.out || m.done || m.ended) {
+      setPhase('over')
+      net.current?.me(snapshot())
+      return checkEnd()
+    }
     m.n++
     nextWord()
+  }
+
+  // Everyone still here who was dealt into this match, with their latest panel.
+  function players() {
+    const m = mp.current, snaps = snapsRef.current
+    return Object.keys(m.seats)
+      .filter(id => id === selfId || peersRef.current.includes(id))
+      .map(id => (id === selfId ? { id, ...snapshot() } : { id, ...(snaps[id]?.round === m.round ? snaps[id] : { score: 0, out: false, done: false, stars: [] }) }))
+  }
+
+  function checkEnd() {
+    const m = mp.current
+    if (!m.live || m.ended) return
+    const all = players()
+    if (m.S.mode === 'light') {
+      const lit = all.filter(p => !p.out)
+      if (lit.length <= 1) end(lit[0]?.id ?? [...all].sort((a, b) => b.score - a.score)[0].id)
+    } else if (m.S.mode === 'tide' && all.every(p => p.done)) end([...all].sort((a, b) => b.score - a.score)[0].id)
+  }
+
+  function end(winner: string) {
+    const m = mp.current, name = COLOURS[m.seats[winner] ?? 0][0], mine = winner === selfId
+    m.ended = true
+    const rank = players().sort((a, b) => (a.id === winner ? -1 : b.id === winner ? 1 : b.score - a.score))
+    const words = { light: mine ? 'last light' : `${name} shone longest`, tide: 'the tide is out', stars: mine ? 'three stars' : `${name} reached them first` }
+    setEnded({ line: words[m.S.mode], rank })
+    setCur('')
+    setPhase('over')
+    setClock(c => ({ ...c, end: Date.now() }))
+    say(mine ? 'You won the match' : `${name} won the match`)
+    if (mine) {
+      snd.current.win(snd.current.grid(BEAT), answer)
+      fx.current.supernova(1.2)
+    }
   }
 
   function backToLobby() {
     mp.current = freshMatch()
     setLive(false)
+    setEnded(null)
+    setLine('')
     restart()
     if (code) setRows([{ word: code, marks: Array(COLS).fill('correct') }])
   }
@@ -472,6 +540,7 @@ export default function App() {
     const prev = snapsRef.current[id], pan = side(id), el = panelEls.current[id]
     snapsRef.current = { ...snapsRef.current, [id]: m }
     setSnaps(snapsRef.current)
+    checkEnd()
     if (!prev || prev.round !== m.round || prev.n !== m.n) return
     const r = m.rows.length - 1, was = prev.rows[r] ?? ''
     for (let c = was.length; c < (m.rows[r]?.length ?? 0); c++) if (m.rows[r][c] === 'c') snd.current.far(c, pan)
@@ -572,7 +641,7 @@ export default function App() {
       </div>
       <aside className="hud right">
         {lobby && room ? <Setup side="right" s={room.settings} set={host ? s => publish(seat({ ...room, settings: s }, peers)) : undefined} /> : <>
-        <p><small>Time</small><b>{clockText(clock.start ? Math.max(0, Math.floor(((clock.end || clock.now) - clock.start) / 1000)) : 0)}</b></p>
+        <p><small>Time</small><b>{clockText(Math.max(0, (live && room?.settings.mode === 'tide' ? room.settings.tide * 60 : 0) + (live && room?.settings.mode === 'tide' ? -1 : 1) * (clock.start ? Math.floor(((clock.end || clock.now) - clock.start) / 1000) : 0)))}</b></p>
         <p><small>Score</small><b><Tally value={scored} /></b></p>
         <p><small>Total</small><b><Tally value={total} /></b></p>
         </>}
@@ -589,9 +658,18 @@ export default function App() {
           ))}
       </div>
 
+      {ended && (
+        <ol className="rank">
+          {ended.rank.map(p => (
+            <li key={p.id} style={{ '--h': COLOURS[room?.seats[p.id] ?? 0][1] } as CSSProperties}>
+              {p.id === selfId ? 'you' : COLOURS[room?.seats[p.id] ?? 0][0]} <b>{p.score.toLocaleString('en-US')}</b>
+            </li>
+          ))}
+        </ol>
+      )}
       {code && (
         <p className="line">
-          {line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
+          {ended ? ended.line : line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
           {lobby && room && selfId in room.seats && !line && (
             <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
           )}
@@ -607,7 +685,7 @@ export default function App() {
                 <button
                   key={k}
                   aria-label={k === 'enter' ? 'Enter' : k === 'back' ? 'Delete' : k}
-                  className={`key ${keys[k] || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : phase === 'over') ? 'beckon' : ''}`}
+                  className={`key ${keys[k] || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => onKey(k)}
                 >
