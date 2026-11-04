@@ -481,7 +481,7 @@ canvas.fx {
 /* ——— playing together ——— */
 .app.together {
   --side: 340px;
-  --chrome: 320px;
+  --chrome: 336px; /* plus a caption line under each board */
 }
 .app.together .stage {
   max-width: none;
@@ -566,6 +566,17 @@ canvas.fx {
   font-size: 11px;
   letter-spacing: 0.18em;
   color: hsl(var(--h) 70% 75% / 0.7);
+}
+.panel figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.which {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: rgb(205 220 255 / 0.45);
 }
 .panel .stars {
   color: hsl(var(--h) 90% 80%);

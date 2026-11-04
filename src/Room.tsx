@@ -96,8 +96,14 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
   )
 }
 
+// Which word a player is on, under their board: "guessing the 2nd word", or that they've stopped.
+export function Which({ n, out, done }: { n: number; out?: boolean; done?: boolean }) {
+  const k = n + 1, th = k % 100 >= 11 && k % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][k % 10] ?? 'th')
+  return <span className="which">{out ? 'light out' : done ? 'finished' : `guessing the ${k}${th} word`}</span>
+}
+
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, el }: { seat: number; snap?: Me; rows: number; el: (e: HTMLElement | null) => void }) {
+export function Panel({ seat, snap, rows, live, el }: { seat: number; snap?: Me; rows: number; live: boolean; el: (e: HTMLElement | null) => void }) {
   const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
     <figure ref={el} className={`panel ${snap?.out ? 'out' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0 } as CSSProperties}>
@@ -112,8 +118,11 @@ export function Panel({ seat, snap, rows, el }: { seat: number; snap?: Me; rows:
         ))}
       </div>
       <figcaption>
-        {name}
-        {!!snap?.stars.length && <span className="stars"> {'✦'.repeat(snap.stars.length)}</span>}
+        <span>
+          {name}
+          {!!snap?.stars.length && <span className="stars"> {'✦'.repeat(snap.stars.length)}</span>}
+        </span>
+        {live && <Which n={snap?.n ?? 0} out={snap?.out} done={snap?.done} />}
       </figcaption>
     </figure>
   )

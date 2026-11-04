@@ -4,7 +4,7 @@ import { score, chains, energyOf, tensionOf, best, points, winBonus, order, lock
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock } from './net.ts'
-import { Setup, Panel } from './Room.tsx'
+import { Setup, Panel, Which } from './Room.tsx'
 
 const ROWS = 6
 const COLS = 5
@@ -689,10 +689,14 @@ export default function App() {
           )
         })}
       </div>
-      {code && room && selfId in room.seats && <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>you</figcaption>}
+      {code && room && selfId in room.seats && (
+        <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>
+          you{live && <Which n={mp.current.n} out={mp.current.out} done={mp.current.done} />}
+        </figcaption>
+      )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">
