@@ -115,7 +115,26 @@ canvas.fx {
   gap: calc(var(--tile) * 0.12);
 }
 .board {
+  position: relative;
   flex-direction: column;
+}
+/* locks waiting to land, stacked beside the board like frost creeping up the glass */
+.frostq {
+  position: absolute;
+  right: 100%;
+  bottom: 0;
+  margin-right: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+}
+.frostq i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: rgb(200 225 255 / 0.5);
+  box-shadow: 0 0 8px rgb(170 210 255 / 0.7);
+  animation: materialize 0.6s ease-out;
 }
 .row {
   transition: opacity 2.5s;

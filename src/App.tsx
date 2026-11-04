@@ -1,9 +1,9 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { ANSWERS, VALID } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, type Net, type Room, type Me } from './net.ts'
+import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock } from './net.ts'
 import { Setup, Panel } from './Room.tsx'
 
 const ROWS = 6
@@ -66,6 +66,7 @@ export default function App() {
   const [clock, setClock] = useState({ start: 0, end: 0, now: 0 })
   const [flare, setFlare] = useState(false) // the winning row's letters flaring HDR-white
   const [sealed, setSealed] = useState(0) // rows frozen shut at the bottom of the board
+  const [pending, setPending] = useState(0) // locks waiting to land on the next guess
   // playing together
   const [code, setCode] = useState<string | null>(null) // the room's word
   const [room, setRoom] = useState<Room | null>(null)
@@ -194,21 +195,34 @@ export default function App() {
   }
 
   function settle(r: number, word: string, marks: Mark[], chain: number[], isNew: boolean[]) {
-    const s = stats.current, won = marks.every(m => m === 'correct')
-    s.streak = isNew.some(Boolean) ? s.streak + 1 : 0
+    const s = stats.current, won = marks.every(m => m === 'correct'), m = mp.current, extended = isNew.some(Boolean)
+    s.streak = extended ? s.streak + 1 : 0
     for (let i = 0; i < COLS - 1; i++) if (chain[i + 1] > 0) fx.current.beam(tile(r, i), tile(r, i + 1))
     fx.current.setStreak(s.streak)
     snd.current.setStreak(s.streak)
     setStreak(s.streak)
     say(`${word}: ${marks.map((m, i) => `${word[i]} ${NAMES[m]}`).join(', ')}`)
+    const rowsAll = m.live ? m.S.rows : ROWS
+    if (m.live) {
+      // a long streak or a quick solve sends locks; they melt your own pending ones first
+      const t = trade(Math.min(6, locksFor(s.streak, extended, won, r + 1) * m.S.locks), m.pending)
+      m.pending = t.pending
+      if (t.sent) fire(t.sent)
+      if (!won) {
+        const l = land(m.pending, rowsAll - m.sealed - (r + 1), has(m.S, 'frost'))
+        m.pending = l.pending
+        if (l.now) seal(l.now, true)
+      }
+      setPending(m.pending)
+    }
     if (!won) {
       snd.current.combo(snd.current.grid(EIGHTH), Math.max(...chain) + 1, s.streak)
-      snd.current.setTension(tensionOf(s.greens.size, limit - sealed - r - 1))
+      snd.current.setTension(tensionOf(s.greens.size, rowsAll - m.sealed - r - 1))
       charge(energyOf(s))
     }
     if (won) finish('won', r)
-    else if (r + 1 >= limit - sealed) finish('lost', r)
-    else setPhase('play')
+    else if (r + 1 >= rowsAll - m.sealed) finish('lost', r)
+    else setPhase(m.ended ? 'over' : 'play')
   }
 
   function finish(res: 'won' | 'lost', r: number) {
@@ -341,7 +355,9 @@ export default function App() {
     peersRef.current = ids
     setPeers(ids)
     setHost(h === selfId)
-    if (h === selfId && r) publish(r.phase === 'lobby' ? seat(r, ids) : r)
+    // a match nobody is still playing in is over: open the lobby again
+    const playing = r && Object.keys(r.seats).some(id => (id === selfId ? mp.current.live : ids.includes(id)))
+    if (h === selfId && r) publish(r.phase === 'lobby' || !playing ? seat({ ...r, phase: 'lobby' }, ids) : r)
     net.current?.me(snapshot()) // newcomers need to see us too
   }
 
@@ -359,6 +375,7 @@ export default function App() {
     const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, ANSWERS.length) })
     restart()
     setLive(true)
+    setPending(0)
     setPhase('busy')
     setTotal(0)
     setLine('')
@@ -375,7 +392,7 @@ export default function App() {
 
   function nextWord() {
     const m = mp.current
-    m.sealed = 0
+    m.sealed = m.locked = 0
     setSealed(0)
     restart(ANSWERS[m.order[m.n % m.order.length]], true)
   }
@@ -395,6 +412,49 @@ export default function App() {
     if (code) setRows([{ word: code, marks: Array(COLS).fill('correct') }])
   }
 
+  // Freeze the next free rows from the bottom up.
+  function seal(n: number, fromLocks: boolean) {
+    const m = mp.current, rowsAll = m.S.rows
+    for (let i = 0; i < n; i++) {
+      const r = rowsAll - m.sealed - 1
+      fx.current.frost(Array.from({ length: COLS }, (_, c) => tile(r, c)))
+      m.sealed++
+      if (fromLocks) m.locked++
+    }
+    setSealed(m.sealed)
+    snd.current.seal()
+  }
+
+  // Send locks to the brightest other player still lit.
+  function fire(n: number) {
+    const m = mp.current, snaps = snapsRef.current
+    const lit = Object.keys(m.seats)
+      .filter(id => id !== selfId && peersRef.current.includes(id) && snaps[id]?.round === m.round && !snaps[id].out && !snaps[id].done)
+      .map(id => ({ id, score: snaps[id].score }))
+    const to = target(lit)?.id
+    if (!to) return
+    net.current?.lock({ to, n })
+    const el = panelEls.current[to]
+    if (el) fx.current.stream(center(board.current), center(el), hueOf(selfId), n)
+    snd.current.launch(side(to))
+  }
+
+  // Locks in flight are drawn on every screen; only the target's board takes them.
+  function gotLock(l: Lock, from: string) {
+    const m = mp.current, a = panelEls.current[from]
+    if (l.to === selfId) {
+      if (a) fx.current.stream(center(a), center(board.current), hueOf(from), l.n)
+      if (m.live && !m.out && !m.done && !m.ended) {
+        m.pending = Math.min(99, m.pending + l.n)
+        setPending(m.pending)
+        snd.current.cold(side(from))
+      }
+    } else {
+      const b = panelEls.current[l.to]
+      if (a && b) fx.current.stream(center(a), center(b), hueOf(from), l.n)
+    }
+  }
+
   // Everyone's panel, as they see it: marks only, never letters.
   const snapshot = (): Me => {
     const m = mp.current
@@ -405,7 +465,7 @@ export default function App() {
     }
   }
   const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
-  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, energy, live, total])
+  useEffect(() => sendMe(), [rows, shown, cur.length, phase, sealed, pending, energy, live, total])
 
   // Someone's panel changed. Their new greens sound faintly from their side of the screen.
   function gotMe(m: Me, id: string) {
@@ -428,9 +488,10 @@ export default function App() {
   const onPeers = useEffectEvent(peersChanged)
   const onStale = useEffectEvent(() => setLine('refresh to play together'))
   const onMe = useEffectEvent(gotMe)
+  const onLock = useEffectEvent(gotLock)
   useEffect(() => {
     if (!code) return
-    const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: () => {}, peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
+    const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
     return () => {
       c.leave()
       net.current = null
@@ -487,6 +548,11 @@ export default function App() {
         </>}
       </aside>
       <div className="board" ref={board} role="grid" aria-label="Guesses">
+        {live && pending > 0 && (
+          <div className="frostq" aria-label={`${pending} locks waiting`}>
+            {Array.from({ length: Math.min(pending, 8) }, (_, i) => <i key={i} />)}
+          </div>
+        )}
         {Array.from({ length: limit }, (_, r) => {
           const row = rows[r], word = row ? row.word : r === rows.length ? cur : ''
           return (

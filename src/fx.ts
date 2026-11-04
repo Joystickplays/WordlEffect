@@ -384,6 +384,24 @@ export class FX {
     for (let i = 0; i < 260 * k * this.q; i++) this.gift(b.x + rand(-b.rx, b.rx), b.y + rand(-b.ry, b.ry), hsl(rand(0, 360), 0.9, 0.68), 1)
   }
 
+  // Locks in flight: a stream of shards from one board to another, in the sender's colour.
+  stream(a: Pt, b: Pt, hue: number, n: number) {
+    const col = hsl(hue, 0.9, 0.7)
+    for (let i = 0; i < (30 + n * 20) * this.q; i++)
+      this.add({ x: a.x, y: a.y, life: rand(0.7, 1.1), delay: rand(0, 0.5), rgb: Math.random() < 0.8 ? col : WHITE, ...bit(1, 0.2, 2.6), align: true, path: [a.x + rand(-14, 14), a.y + rand(-14, 14), b.x + rand(-10, 10), b.y + rand(-10, 10)] })
+    setTimeout(() => this.burst(b.x, b.y, 16 * n, { col: ICE, speed: [30, 160], life: [0.6, 1.4], scale: 0.8, sparks: 0.1, hot: 2 }), 1000)
+  }
+
+  // A row freezing shut: each tile flashes cold and sheds a few ice shards.
+  frost(row: Tile[]) {
+    this.poke(-0.03, 0.15)
+    this.rim.xv += 60
+    for (const t of row) {
+      this.add({ x: t.x, y: t.y, life: 0.7, age: 0.125, size: t.w / 2, shape: BOX, aspect: 1, align: false, ang: 0, rgb: ICE, hot: 0.5 })
+      this.burst(t.x, t.y, 14, { col: () => (Math.random() < 0.7 ? ICE : WHITE), speed: [20, 120], life: [0.8, 1.6], scale: 0.8, grav: 30, sparks: 0.05, hot: 1.6 })
+    }
+  }
+
   // A light going out: embers drifting up from someone's panel.
   ember({ x, y }: Pt, hue: number) {
     this.burst(x, y, 40, { col: () => hsl(hue + rand(-15, 15), 0.6, 0.6), speed: [10, 60], life: [1.5, 3], scale: 0.7, drag: 0.97, grav: -25, sparks: 0.3, hot: 1.2 })

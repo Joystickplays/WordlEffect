@@ -542,6 +542,28 @@ export class Sound {
     this.glass(ARP[col] + 12, this.ctx.currentTime + rand(0, 0.04), 0.035, { pan, dur: 2.4, rev: 1, echo: 0.5, scoop: false })
   }
 
+  // Locks sent: a quick rising glass figure, flying toward whoever they're aimed at.
+  launch(pan: number) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    ;[79, 84, 91].forEach((m, i) => this.glass(m, t + i * 0.07, 0.07, { pan: pan * (0.3 + i * 0.35), dur: 1.6, rev: 0.9, echo: 0.4, scoop: false }))
+  }
+
+  // Locks coming your way: one high, cold note.
+  cold(pan: number) {
+    if (!this.ctx) return
+    this.glass(96, this.ctx.currentTime + 0.8, 0.05, { pan, dur: 3, rev: 1, echo: 0.5, scoop: false })
+  }
+
+  // A row freezing shut: a muted low cluster, felt-soft, in key.
+  seal() {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime, r = ROOTS[this.root] + 12
+    this.piano(r, t, 0.3, { decay: 1.6, bright: 0.35, rev: 0.5, echo: 0 })
+    this.piano(r + 2, t + 0.012, 0.22, { decay: 1.6, bright: 0.35, rev: 0.5, echo: 0 })
+    this.glass(r + 48, t + 0.05, 0.04, { dur: 2, rev: 0.9, echo: 0.3, scoop: false })
+  }
+
   // A friend's light going out: a soft falling pair.
   fall(pan: number) {
     if (!this.ctx) return
