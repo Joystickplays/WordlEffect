@@ -378,7 +378,8 @@ canvas.fx {
 
 @media (max-width: 640px) {
   .app {
-    --chrome: 330px;
+    --chrome: 360px;
+    padding-bottom: 40px; /* room for the corner icons below the keys */
   }
   .stage {
     grid-template-columns: 1fr 1fr;
@@ -602,7 +603,7 @@ canvas.fx {
 
 @media (max-width: 640px) {
   .app.together {
-    --chrome: 400px;
+    --chrome: 430px;
   }
   .stage:has(.peers) {
     grid-template-columns: 1fr 1fr;
