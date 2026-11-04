@@ -108,7 +108,7 @@ export function Which({ n, out, done }: { n: number; out?: boolean; done?: boole
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, live, el }: { seat: number; snap?: Me; rows: number; live: boolean; el: (e: HTMLElement | null) => void }) {
+export function Panel({ seat, snap, rows, live, potato, el }: { seat: number; snap?: Me; rows: number; live: boolean; potato: boolean; el: (e: HTMLElement | null) => void }) {
   const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
     <figure ref={el} className={`panel ${snap?.out ? 'out' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0 } as CSSProperties}>
@@ -129,6 +129,7 @@ export function Panel({ seat, snap, rows, live, el }: { seat: number; snap?: Me;
           {!!snap?.stars.length && <span className="stars"> {'✦'.repeat(snap.stars.length)}</span>}
         </span>
         {live && <Which n={snap?.n ?? 0} out={snap?.out} done={snap?.done} />}
+        {potato && <span className="potato" aria-label={`${name} has the hot potato`}>🥔</span>}
       </figcaption>
     </figure>
   )

@@ -21,6 +21,8 @@ export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; 
 // One player's whole panel. Marks only ("ccpaa"), never letters.
 export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[] }
 export type Lock = { to: string; n: number }
+// Everything else players do to each other: throwing the hot potato, rigging a word, using a skill.
+export type Ev = { k: 'potato'; to: string; fuse: number; gen: number; boom: boolean }
 type Hello = { v: number; since: number }
 
 type Obj = Record<string, unknown>
@@ -42,11 +44,14 @@ const okMe = (m: unknown): m is Me =>
   Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32)) &&
   Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4))
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
+const id = (x: unknown) => typeof x === 'string' && x.length < 64
+const okEv = (e: unknown): e is Ev => obj(e) && e.k === 'potato' && id(e.to) && int(e.fuse, 0, 60000) && int(e.gen, 0, 1e6) && typeof e.boom === 'boolean'
 
 export type Handlers = {
   room(r: Room): void
   me(m: Me, from: string): void
   lock(l: Lock, from: string): void
+  ev(e: Ev, from: string): void
   peers(ids: string[], host: string): void // whenever someone arrives or leaves
   stale(): void // someone is running a different version
 }
@@ -91,7 +96,7 @@ export function connect(word: string, on: Handlers) {
   const local = new URLSearchParams(location.search).has('local')
   const since = Date.now(), room: ReturnType<typeof localRoom> = local ? localRoom(word) : (joinRoom({ appId: 'wordleffect' }, word) as never), known = new Map<string, number>()
   const hello = room.makeAction<Hello>('hello'), roomA = room.makeAction<Room>('room')
-  const meA = room.makeAction<Me>('me'), lockA = room.makeAction<Lock>('lock')
+  const meA = room.makeAction<Me>('me'), lockA = room.makeAction<Lock>('lock'), evA = room.makeAction<Ev>('ev')
   // The host is whoever has been here longest: everyone works it out the same way, so no election is needed.
   const host = () => [...known, [selfId, since] as const].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1))[0][0]
   const changed = () => on.peers([...known.keys()], host())
@@ -107,11 +112,13 @@ export function connect(word: string, on: Handlers) {
   roomA.onMessage = (r, { peerId }) => void (known.has(peerId) && peerId === host() && okRoom(r) && on.room(r))
   meA.onMessage = (m, { peerId }) => void (known.has(peerId) && okMe(m) && on.me(m, peerId))
   lockA.onMessage = (l, { peerId }) => void (known.has(peerId) && okLock(l) && on.lock(l, peerId))
+  evA.onMessage = (e, { peerId }) => void (known.has(peerId) && okEv(e) && on.ev(e, peerId))
 
   return {
     room: (r: Room) => void roomA.send(r),
     me: (m: Me) => void meA.send(m),
     lock: (l: Lock) => void lockA.send(l),
+    ev: (e: Ev) => void evA.send(e),
     leave: () => void room.leave(),
   }
 }
