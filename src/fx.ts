@@ -18,6 +18,7 @@ function hsl(h: number, s: number, l: number): RGB {
 const SPARK = 0, SHARD = 1, FLAKE = 2, RING = 3, RIM = 4, CLOUD = 5, GLYPH = 6, BOX = 7
 const LIT = -0.93 // the square rim's resting light, from the top right
 const GREEN = hsl(156, 1, 0.6)
+const GMAX = Math.max(GREEN[0], GREEN[1], GREEN[2])
 const AMBER = hsl(38, 1, 0.58)
 const WHITE: RGB = [1, 1, 1]
 const SLATE = hsl(226, 0.3, 0.42)
@@ -165,8 +166,15 @@ export class FX {
     return m
   }
 
+  // After a win, every light on screen turns green for a moment, keeping its brightness, then drifts back.
+  verdant = 0
   put(x: number, y: number, size: number, ang: number, rgb: RGB, k: number, aspect: number, shape: number, blur: number, extra = 0) {
     if (this.n >= MAX || k <= 0.001) return
+    if (this.verdant > 0) {
+      const t = Math.min(1, this.verdant / 0.5), l = Math.max(rgb[0], rgb[1], rgb[2]) / GMAX, m = this.mixed
+      for (let i = 0; i < 3; i++) m[i] = rgb[i] + (GREEN[i] * l - rgb[i]) * t
+      rgb = m
+    }
     const b = this.buf, o = this.n++ * STRIDE
     b[o] = x
     b[o + 1] = y
@@ -390,6 +398,7 @@ export class FX {
     this.mood = 'joy'
     this.target = 1
     this.glow = 1.5
+    if (from) this.verdant = 1.6 // about 1.1 s all green, then half a second back to colour
     this.poke(0.12, 1.2, 0.3)
     this.add({ x: b.x, y: b.y, life: 1.4, age: 0.13, size: Math.max(this.W, this.H) * 0.6, shape: CLOUD, aspect: 1, align: false, rgb: from ? hsl(150, 0.7, 0.8) : hsl(45, 0.6, 0.85), to: from && hsl(45, 0.6, 0.85), hot: this.q * 1.1 })
     for (let i = 0; i < 2; i++) setTimeout(() => this.wave(b.x, b.y, hsl(50 + i * 80, 1, 0.75), 1 - i * 0.3), i * 260)
@@ -570,6 +579,7 @@ export class FX {
     this.time += dt
     this.energy += (this.target - this.energy) * (1 - Math.exp(-dt * 0.8))
     this.glow *= Math.exp(-dt * 1.2)
+    this.verdant = Math.max(0, this.verdant - dt)
     const h = this.hue(), cold = this.mood === 'cold'
     this.pal = HUES.map(o => hsl(h + o, cold ? 0.35 : 0.7, 0.68))
     if (this.snowing && Math.random() < dt * 30 * this.q)

@@ -269,10 +269,10 @@ export default function App() {
     setCur('')
     setShown(0)
     setPhase('busy')
-    // a winning row rushes through its arpeggio; anything else is checked one eighth note at a time
-    const t0 = snd.current.grid(EIGHTH), step = marks.every(m => m === 'correct') ? 0.2 : EIGHTH
+    // checked one eighth note at a time; a win settles on its last letter, so the burst lands right on it
+    const t0 = snd.current.grid(EIGHTH), won = marks.every(m => m === 'correct')
     marks.forEach((m, i) => {
-      const t = t0 + i * step
+      const t = t0 + i * EIGHTH
       snd.current.reveal(i, m, t, { chain: chain[i], fresh: isNew[i] })
       snd.current.at(t, () => {
         if (m === 'correct') s.greens.add(i)
@@ -284,7 +284,7 @@ export default function App() {
         setKeys(k => ({ ...k, [word[i]]: best(k[word[i]], m) }))
       })
     })
-    snd.current.at(t0 + (COLS - 1) * step + EIGHTH, () => settle(r, word, marks, chain, isNew))
+    snd.current.at(t0 + (COLS - 1) * EIGHTH + (won ? 0 : EIGHTH), () => settle(r, word, marks, chain, isNew))
   }
 
   function settle(r: number, word: string, marks: Mark[], chain: number[], isNew: boolean[]) {
@@ -342,7 +342,7 @@ export default function App() {
     if (m.live && res === 'won' && m.S.skills && m.bag.length < 3) spinReel()
     // heavy frost carries this word's locked rows into the next one; a solve in 3 or fewer thaws one
     m.carry = has(m.S, 'frost') ? Math.max(0, m.locked - (res === 'won' && r < 3 ? 1 : 0)) : 0
-    const t = res === 'won' ? snd.current.now() + 0.375 : snd.current.grid(BEAT) // a win bursts a breath after the last letter
+    const t = res === 'won' ? snd.current.now() : snd.current.grid(BEAT) // a win bursts the moment its last letter shows
     if (res === 'won') {
       earn(winBonus(r + 1))
       snd.current.win(t, answer)
