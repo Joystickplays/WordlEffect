@@ -99,7 +99,7 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
 // Which word a player is on, under their board: "guessing the 2nd word", or that they've stopped.
 export function Which({ n, out, done }: { n: number; out?: boolean; done?: boolean }) {
   const k = n + 1, th = k % 100 >= 11 && k % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][k % 10] ?? 'th')
-  return <span className="which">{out ? 'light out' : done ? 'finished' : `guessing the ${k}${th} word`}</span>
+  return <span className="which"> · {out ? 'light out' : done ? 'finished' : `guessing the ${k}${th} word`}</span>
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
