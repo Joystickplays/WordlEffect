@@ -58,10 +58,12 @@ export default function App() {
   const [total, setTotal] = useState(0)
   const [clock, setClock] = useState({ start: 0, end: 0, now: 0 })
   const [flare, setFlare] = useState(false) // the winning row's letters flaring HDR-white
+  const [sealed, setSealed] = useState(0) // rows frozen shut at the bottom of the board
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
   const fx = useRef<FX>(null!), snd = useRef<Sound>(null!), stats = useRef(fresh())
+  const limit = ROWS
 
   useEffect(() => {
     const f = (fx.current = new FX(canvas.current))
@@ -173,11 +175,11 @@ export default function App() {
     say(`${word}: ${marks.map((m, i) => `${word[i]} ${NAMES[m]}`).join(', ')}`)
     if (!won) {
       snd.current.combo(snd.current.grid(EIGHTH), Math.max(...chain) + 1, s.streak)
-      snd.current.setTension(tensionOf(s.greens.size, ROWS - r - 1))
+      snd.current.setTension(tensionOf(s.greens.size, limit - sealed - r - 1))
       charge(energyOf(s))
     }
     if (won) finish('won', r)
-    else if (r === ROWS - 1) finish('lost', r)
+    else if (r + 1 >= limit - sealed) finish('lost', r)
     else setPhase('play')
   }
 
@@ -190,7 +192,7 @@ export default function App() {
       snd.current.win(t, answer)
       snd.current.at(t, () => {
         fx.current.setBoard(board.current.getBoundingClientRect())
-        fx.current.supernova(1 + (ROWS - 1 - r) * 0.25) // the fewer the guesses, the brighter the star
+        fx.current.supernova(1 + Math.max(0, 5 - r) * 0.25) // the fewer the guesses, the brighter the star
         ;[...answer].forEach((ch, c) => fx.current.glyph(tile(r, c), ch, 4.5, 1.6))
         setFlare(true)
         setEnergy(1)
@@ -230,6 +232,7 @@ export default function App() {
     setPoints(0)
     setClock({ start: 0, end: 0, now: 0 })
     setFlare(false)
+    setSealed(0)
   }
 
   const press = useEffectEvent(onKey)
@@ -248,18 +251,18 @@ export default function App() {
   }, [])
 
   return (
-    <main className={`app ${woke ? 'awake' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s` } as CSSProperties}>
+    <main className={`app ${woke ? 'awake' : ''}`} style={{ '--e': energy, '--bar': `${BAR}s`, '--rows': limit } as CSSProperties}>
       <div className="stage">
       <aside className="hud left">
-        <p><small>Guess</small><b>{rows.length}<i>/{ROWS}</i></b></p>
+        <p><small>Guess</small><b>{rows.length}<i>/{limit}</i></b></p>
         <p><small>Streak</small><b>{streak ? `×${streak}` : '–'}</b></p>
         <p><small>Light</small><Meter value={energy} /></p>
       </aside>
       <div className="board" ref={board} role="grid" aria-label="Guesses">
-        {Array.from({ length: ROWS }, (_, r) => {
+        {Array.from({ length: limit }, (_, r) => {
           const row = rows[r], word = row ? row.word : r === rows.length ? cur : ''
           return (
-            <div key={r} role="row" ref={el => { rowEls.current[r] = el! }} className={`row ${result === 'won' && r !== rows.length - 1 ? 'dim' : ''} ${flare && r === rows.length - 1 ? 'flare' : ''}`}>
+            <div key={r} role="row" ref={el => { rowEls.current[r] = el! }} className={`row ${result === 'won' && r !== rows.length - 1 ? 'dim' : ''} ${flare && r === rows.length - 1 ? 'flare' : ''} ${r >= limit - sealed ? 'sealed' : ''}`}>
               {Array.from({ length: COLS }, (_, c) => {
                 const mark = row && (r < rows.length - 1 || c < shown) ? row.marks[c] : ''
                 const caret = phase === 'play' && r === rows.length && c === cur.length
