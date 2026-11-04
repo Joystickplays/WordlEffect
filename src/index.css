@@ -123,6 +123,8 @@ canvas.fx {
 .board {
   position: relative;
   flex-direction: column;
+  transform: translateX(calc(var(--nudge, 0) * 1px));
+  transition: transform 0.35s cubic-bezier(0.25, 1.4, 0.5, 1);
 }
 /* locks waiting to land, stacked beside the board like frost creeping up the glass */
 .frostq {

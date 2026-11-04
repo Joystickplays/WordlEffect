@@ -135,6 +135,9 @@ export default function App() {
   const here = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)) : []
   // who can start: two or more, one on each side for teams, and one is enough against the echoes
   const ready = !room ? false : room.settings.versus === 'echoes' ? seated >= 1 : room.settings.versus === 'teams' ? [0, 1].every(t => here.some(id => teamOf(id) === t)) : seated >= 2
+  // the board leans a few pixels toward where you're typing: left on the first letter, right on the last
+  const typedAt = cur.length ? [0, 1, 2, 3, 4].filter(i => !(i in squat))[cur.length - 1] : 2
+  const nudge = phase === 'play' ? (typedAt - 2) * 3 : 0
   const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
   // team totals, for the HUD: your own score plus everyone else's latest
   const score2 = [0, 1].map(t => (teams ? (teamOf(selfId) === t ? total : 0) + others.filter(id => teamOf(id) === t).reduce((s, id) => s + (snaps[id]?.round === room?.round ? snaps[id].score : 0), 0) : 0))
@@ -266,9 +269,10 @@ export default function App() {
     setCur('')
     setShown(0)
     setPhase('busy')
-    const t0 = snd.current.grid(EIGHTH)
+    // a winning row rushes through its arpeggio; anything else is checked one eighth note at a time
+    const t0 = snd.current.grid(EIGHTH), step = marks.every(m => m === 'correct') ? 0.1 : EIGHTH
     marks.forEach((m, i) => {
-      const t = t0 + i * EIGHTH
+      const t = t0 + i * step
       snd.current.reveal(i, m, t, { chain: chain[i], fresh: isNew[i] })
       snd.current.at(t, () => {
         if (m === 'correct') s.greens.add(i)
@@ -280,7 +284,7 @@ export default function App() {
         setKeys(k => ({ ...k, [word[i]]: best(k[word[i]], m) }))
       })
     })
-    snd.current.at(t0 + COLS * EIGHTH, () => settle(r, word, marks, chain, isNew))
+    snd.current.at(t0 + (COLS - 1) * step + EIGHTH, () => settle(r, word, marks, chain, isNew))
   }
 
   function settle(r: number, word: string, marks: Mark[], chain: number[], isNew: boolean[]) {
@@ -338,13 +342,13 @@ export default function App() {
     if (m.live && res === 'won' && m.S.skills && m.bag.length < 3) spinReel()
     // heavy frost carries this word's locked rows into the next one; a solve in 3 or fewer thaws one
     m.carry = has(m.S, 'frost') ? Math.max(0, m.locked - (res === 'won' && r < 3 ? 1 : 0)) : 0
-    const t = snd.current.grid(BEAT)
+    const t = res === 'won' ? snd.current.now() + 0.25 : snd.current.grid(BEAT) // a win bursts a quarter second after the last letter
     if (res === 'won') {
       earn(winBonus(r + 1))
       snd.current.win(t, answer)
       snd.current.at(t, () => {
         fx.current.setBoard(board.current.getBoundingClientRect())
-        fx.current.supernova(1 + Math.max(0, 5 - r) * 0.25) // the fewer the guesses, the brighter the star
+        fx.current.supernova(1 + Math.max(0, 5 - r) * 0.25, [0, 1, 2, 3, 4].map(c => tile(r, c))) // the fewer the guesses, the brighter; out of the letters
         ;[...answer].forEach((ch, c) => fx.current.glyph(tile(r, c), ch, 4.5, 1.6))
         setFlare(true)
         setEnergy(1)
@@ -1200,7 +1204,7 @@ export default function App() {
       </aside>
       <div className="boards">
       <figure className={`panel ${teams ? `side-${teamOf(selfId)}` : ''}`} style={teams ? { gridRow: 1 } : undefined}>
-      <div className="board" ref={board} role="grid" aria-label="Guesses">
+      <div className="board" ref={board} role="grid" aria-label="Guesses" style={{ '--nudge': nudge } as CSSProperties}>
         {live && pending > 0 && (
           <div className="frostq" aria-label={`${pending} locks waiting`}>
             {Array.from({ length: Math.min(pending, 8) }, (_, i) => <i key={i} />)}

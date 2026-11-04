@@ -38,7 +38,9 @@ type Particle = Pt & Look & {
   vx: number; vy: number; drag: number; grav: number; age: number; life: number; delay: number
   rgb: RGB; a: number; ang: number; px: number; py: number; cell: number
   path?: number[]
-  orbit?: { cx: number; cy: number; r: number; a: number; w: number; grow: number }
+  orbit?: { cx: number; cy: number; r: number; a: number; w: number; grow: number; fling?: number }
+  to?: RGB // shifts toward this colour over its life
+  halo?: boolean // the first streak's loose glitter, not a ring
   ring?: { lv: number; a: number; w: number; j: number } | null
 }
 type Spawn = Pt & { life: number; rgb: RGB } & Partial<Particle>
@@ -46,7 +48,7 @@ type Drift = Pt & { dx: number; dy: number }
 type Mote = Drift & { z: number; th: number; hb: number; ph: number; shape: number; aspect: number; size: number; blur: number; fl: number; ang: number }
 type Star = Drift & Look & { vx: number; vy: number; px: number; py: number; a: number; r: number; w: number; k: number; rgb: RGB; ph: number; fade: number; dying: boolean; ang: number }
 type Wave = Pt & { r: number; v: number; life: number; s: number; col: RGB }
-type Burst = { col: RGB | (() => RGB); speed?: number[]; life?: number[]; scale?: number; drag?: number; grav?: number; a?: number; sparks?: number; hot?: number }
+type Burst = { to?: () => RGB; col: RGB | (() => RGB); speed?: number[]; life?: number[]; scale?: number; drag?: number; grav?: number; a?: number; sparks?: number; hot?: number }
 
 // One fragment of light: mostly shards that point where they fly, some tumbling flakes, rarely a hot spark.
 function bit(scale: number, sparks: number, hot: number): Look {
@@ -155,6 +157,14 @@ export class FX {
       this.ps.push({ vx: 0, vy: 0, drag: 0.95, grav: 0, age: 0, delay: 0, size: 3, shape: SHARD, aspect: 4, blur: 0, spin: 0, align: true, hot: 1, a: 1, ang: rand(0, TAU), px: p.x, py: p.y, cell: 0, ...p })
   }
 
+  // a colour partway from one to another, in a reused array (put copies it at once)
+  mixed = [0, 0, 0]
+  blend(a: RGB, b: RGB, t: number) {
+    const s = t * t * (3 - 2 * t), m = this.mixed
+    for (let i = 0; i < 3; i++) m[i] = a[i] + (b[i] - a[i]) * s
+    return m
+  }
+
   put(x: number, y: number, size: number, ang: number, rgb: RGB, k: number, aspect: number, shape: number, blur: number, extra = 0) {
     if (this.n >= MAX || k <= 0.001) return
     const b = this.buf, o = this.n++ * STRIDE
@@ -205,10 +215,10 @@ export class FX {
     this.rim.spin += turns * TAU * 0.45 // decays at 0.45/s, so the light drifts exactly `turns` of a lap, slowly
   }
 
-  burst(x: number, y: number, n: number, { col, speed = [40, 300], life = [0.8, 2], scale = 1, drag = 0.94, grav = 0, a = 1, sparks = 0.12, hot = 2.4 }: Burst) {
+  burst(x: number, y: number, n: number, { to, col, speed = [40, 300], life = [0.8, 2], scale = 1, drag = 0.94, grav = 0, a = 1, sparks = 0.12, hot = 2.4 }: Burst) {
     for (let i = 0; i < Math.round(n * this.q); i++) {
       const ang = rand(0, TAU), sp = rand(speed[0], speed[1])
-      this.add({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: rand(life[0], life[1]), drag, grav, a, rgb: typeof col === 'function' ? col() : col, ...bit(scale, sparks, hot) })
+      this.add({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: rand(life[0], life[1]), drag, grav, a, rgb: typeof col === 'function' ? col() : col, to: to?.(), ...bit(scale, sparks, hot) })
     }
   }
 
@@ -296,8 +306,9 @@ export class FX {
       this.glow = Math.min(1.5, this.glow + (fresh ? 0.5 : 0.2))
     } else if (mark === 'present') {
       // they circle the tile, then wander off along the row looking for their real seat
+      // flung out of the letter, then caught in a circle, each at its own speed
       for (let i = 0; i < 34 * this.q; i++)
-        this.add({ x, y, life: rand(1.2, 2.2), rgb: AMBER, ...bit(0.9, 0.1, 2), align: true, orbit: { cx: x, cy: y, r: w * rand(0.45, 0.8), a: rand(0, TAU), w: rand(2.5, 4.5) * pick([-1, 1]), grow: rand(10, 40) } })
+        this.add({ x, y, life: rand(1.4, 2.4), rgb: AMBER, ...bit(0.9, 0.1, 2), align: true, orbit: { cx: x, cy: y, r: w * 0.15, a: rand(0, TAU), w: rand(1.2, 6) * pick([-1, 1]), grow: rand(140, 320), fling: 3.2 } })
       for (let i = 0; i < 12 * this.q; i++)
         this.add({ x, y: y + rand(-w / 3, w / 3), vx: pick([-1, 1]) * rand(60, 220), vy: rand(-10, 10), drag: 0.975, life: rand(1, 1.8), rgb: AMBER, ...bit(0.8, 0, 1) })
       this.gift(x, y, AMBER, Math.round(3 * this.q))
@@ -327,11 +338,18 @@ export class FX {
     this.burst((a.x + b.x) / 2, (a.y + b.y) / 2, 10, { col: WHITE, speed: [20, 80], life: [0.5, 1], scale: 0.7 })
   }
 
-  // Each streak level is another ring of light orbiting the board. Breaking the streak lets them fall.
+  // A streak of one is a loose halo of glitter drifting round the board. From two on, each level is a ring of light,
+  // and the halo pulls itself together into the first ones. Breaking the streak lets everything fall.
   setStreak(n: number) {
     const b = this.board
-    if (b && n > this.streak) {
-      for (let lv = this.streak; lv < Math.min(n, RINGS.length); lv++) {
+    if (b && n === 1 && this.streak === 0) {
+      for (let i = 0; i < 70 * this.q; i++)
+        this.add({ x: b.x, y: b.y, life: 1e9, size: rand(1.2, 2.6), shape: SPARK, aspect: 1, align: false, rgb: Math.random() < 0.6 ? RINGS[0] : WHITE, hot: rand(0.8, 1.8), halo: true, ring: { lv: 0, a: rand(0, TAU), w: rand(0.05, 0.22) * pick([-1, 1]), j: rand(-30, 70) } })
+      this.wave(b.x, b.y, RINGS[0], 0.25)
+    }
+    if (b && n > 1 && n > this.streak) {
+      for (const p of this.ps) if (p.halo) Object.assign(p, { halo: false, ring: null, age: 0, life: rand(0.5, 0.9), path: [p.x, p.y, b.x + rand(-b.rx, b.rx) * 1.2, b.y + rand(-b.ry, b.ry) * 1.2] })
+      for (let lv = this.streak > 1 ? this.streak : 0; lv < Math.min(n, RINGS.length); lv++) {
         const count = Math.round(50 * this.q), w = (0.32 - lv * 0.04) * (lv % 2 ? -1 : 1)
         for (let i = 0; i < count; i++)
           this.add({ x: b.x, y: b.y, life: 1e9, size: rand(2.5, 4.5), aspect: 3, rgb: RINGS[lv], ring: { lv, a: (i / count) * TAU + rand(-0.05, 0.05), w, j: rand(-4, 4) } })
@@ -365,16 +383,19 @@ export class FX {
     this.root = i
   }
 
-  supernova(k: number) {
+  supernova(k: number, from?: Pt[]) {
     const b = this.board
     if (!b) return
+    const rainbow = () => hsl(rand(0, 360), 0.95, 0.68)
     this.mood = 'joy'
     this.target = 1
     this.glow = 1.5
     this.poke(0.12, 1.2, 0.3)
-    this.add({ x: b.x, y: b.y, life: 1.4, age: 0.13, size: Math.max(this.W, this.H) * 0.6, shape: CLOUD, aspect: 1, align: false, rgb: hsl(45, 0.6, 0.85), hot: this.q * 1.1 })
+    this.add({ x: b.x, y: b.y, life: 1.4, age: 0.13, size: Math.max(this.W, this.H) * 0.6, shape: CLOUD, aspect: 1, align: false, rgb: from ? hsl(150, 0.7, 0.8) : hsl(45, 0.6, 0.85), to: from && hsl(45, 0.6, 0.85), hot: this.q * 1.1 })
     for (let i = 0; i < 2; i++) setTimeout(() => this.wave(b.x, b.y, hsl(50 + i * 80, 1, 0.75), 1 - i * 0.3), i * 260)
-    this.burst(b.x, b.y, 650 * k, { col: () => hsl(rand(0, 360), 0.95, 0.68), speed: [80, 1000], life: [1.5, 4.5], scale: 1.2, drag: 0.955, grav: 12, sparks: 0.15, hot: 3 })
+    // out of the green letters, green at first, then every colour
+    if (from) for (const p of from) this.burst(p.x, p.y, (650 * k) / from.length, { col: GREEN, to: rainbow, speed: [80, 1000], life: [1.5, 4.5], scale: 1.2, drag: 0.955, grav: 12, sparks: 0.15, hot: 3 })
+    else this.burst(b.x, b.y, 650 * k, { col: rainbow, speed: [80, 1000], life: [1.5, 4.5], scale: 1.2, drag: 0.955, grav: 12, sparks: 0.15, hot: 3 })
     for (const e of this.earned) {
       const ang = Math.atan2(e.y - b.y, e.x - b.x), sp = rand(300, 800)
       e.vx += Math.cos(ang) * sp
@@ -382,7 +403,10 @@ export class FX {
       e.r = Math.min(1.3, e.r * rand(1.1, 1.5))
     }
     // the board's light pours out and fills the sky
-    for (let i = 0; i < 260 * k * this.q; i++) this.gift(b.x + rand(-b.rx, b.rx), b.y + rand(-b.ry, b.ry), hsl(rand(0, 360), 0.9, 0.68), 1)
+    for (let i = 0; i < 260 * k * this.q; i++) {
+      const p = from ? pick(from) : { x: b.x + rand(-b.rx, b.rx), y: b.y + rand(-b.ry, b.ry) }
+      this.gift(p.x, p.y, hsl(rand(0, 360), 0.9, 0.68), 1)
+    }
   }
 
   // Locks in flight: a stream of shards from one board to another, in the sender's colour.
@@ -714,9 +738,10 @@ export class FX {
         p.x = ax + (bx - ax) * s - ((by - ay) / len) * wob
         p.y = ay + (by - ay) * s + ((bx - ax) / len) * wob
       } else if (p.orbit) {
-        const o = p.orbit
-        o.a += o.w * dt
+        const o = p.orbit, k = o.fling ? 1 - Math.exp(-p.age * o.fling) : 1 // flung ones only start turning once they're out
+        o.a += o.w * k * dt
         o.r += o.grow * dt
+        if (o.fling) o.grow *= Math.exp(-dt * o.fling)
         p.x = o.cx + Math.cos(o.a) * o.r
         p.y = o.cy + Math.sin(o.a) * o.r
       } else {
@@ -733,7 +758,7 @@ export class FX {
       const k = p.a * fade * p.hot * (p.shape === SHARD ? shine(p.ang) : 1) * (1 + this.glow * 0.3)
       // rings swell with the glow; a checked letter pops 15% larger for its first quarter second
       const grow = p.ring ? 1 + this.glow * 0.4 : p.shape === GLYPH ? 1 + 0.15 * Math.max(0, 1 - (p.age - 0.125) * 4) ** 2 : 1
-      this.put(p.x, p.y, p.size * grow, p.ang, p.rgb, k, p.aspect, p.shape, p.blur, p.cell)
+      this.put(p.x, p.y, p.size * grow, p.ang, p.to ? this.blend(p.rgb, p.to, Math.min(1, Math.max(0, t * 3 - 0.4))) : p.rgb, k, p.aspect, p.shape, p.blur, p.cell)
     }
   }
 }
