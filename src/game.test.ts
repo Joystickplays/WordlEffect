@@ -1,7 +1,8 @@
 /// <reference types="node" />
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose, hardest, roll, balance } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose, hardest, roll, balance, possible, echoGuess } from './game.ts'
+import { readFileSync } from 'node:fs'
 
 test('score handles exact, misplaced and duplicate letters', () => {
   assert.deepEqual(score('crane', 'crane'), Array(5).fill('correct'))
@@ -135,4 +136,41 @@ test('newcomers join the smaller team', () => {
   assert.equal(balance({ a: 0 }), 1)
   assert.equal(balance({ a: 0, b: 1 }), 0)
   assert.equal(balance({ a: 0, b: 0, c: 1 }), 1)
+})
+
+test('possible answers respect repeated letters', () => {
+  const rows = [{ word: 'papal', marks: score('papal', 'apple') }]
+  assert.ok(possible(['apple', 'ample', 'paper'], rows).includes('apple'))
+  assert.deepEqual(possible(['apple', 'ample', 'paper'], rows), ['apple'])
+})
+
+// The answer lists, read straight from the source so the test runs without the bundler.
+const EN = readFileSync(new URL('./words.ts', import.meta.url), 'utf8').split('`')[1].trim().split(/\s+/)
+const ID = readFileSync(new URL('./id/answers.txt', import.meta.url), 'utf8').split('\n').filter(Boolean)
+
+function play(answers: string[], skill: number, seed: number) {
+  let s = seed
+  const rand = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648)
+  let total = 0, solved = 0
+  for (const answer of answers) {
+    const rows: { word: string; marks: ReturnType<typeof score> }[] = []
+    for (let g = 0; g < 6; g++) {
+      const word = echoGuess(answers, rows, skill, rand)
+      rows.push({ word, marks: score(word, answer) })
+      if (word === answer) {
+        solved++
+        total += g + 1
+        break
+      }
+    }
+  }
+  return { rate: solved / answers.length, avg: total / solved }
+}
+
+test('echoes solve nearly every word, fiercer ones in fewer guesses', () => {
+  for (const [name, list] of [['en', EN], ['id', ID]] as const) {
+    const [gentle, even, fierce] = [0, 1, 2].map(k => play(list, k, 7))
+    for (const r of [gentle, even, fierce]) assert.ok(r.rate >= 0.97, `${name}: solve rate ${r.rate}`)
+    assert.ok(fierce.avg < even.avg && even.avg < gentle.avg, `${name}: ${gentle.avg} ${even.avg} ${fierce.avg}`)
+  }
 })

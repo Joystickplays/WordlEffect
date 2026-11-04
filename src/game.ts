@@ -143,3 +143,40 @@ export function roll<K extends string>(weights: Record<K, number>, rand = Math.r
 
 // Teams: a newcomer joins the smaller side (dawn on a tie).
 export const balance = (sides: Record<string, number>) => (Object.values(sides).filter(s => s === 1).length < Object.values(sides).filter(s => s === 0).length ? 1 : 0)
+
+// ——— echoes: the bots ———
+
+type Row = { word: string; marks: Mark[] }
+
+// Answers that would have given exactly these colours. Re-scoring each one handles repeated letters for free.
+export const possible = (answers: string[], rows: Row[]) => answers.filter(a => rows.every(r => score(r.word, a).every((m, i) => m === r.marks[i])))
+
+// How useful a word's letters are against a list: common letters count once each.
+function coverage(list: string[]) {
+  const freq: Record<string, number> = {}
+  for (const w of list) for (const ch of new Set(w)) freq[ch] = (freq[ch] ?? 0) + 1
+  return (w: string) => [...new Set(w)].reduce((s, ch) => s + (freq[ch] ?? 0), 0)
+}
+const top = (list: string[], score: (w: string) => number, rand: () => number) => {
+  let most = -1, pick: string[] = []
+  for (const w of list) {
+    const s = score(w)
+    if (s > most) (most = s), (pick = [w])
+    else if (s === most) pick.push(w)
+  }
+  return pick[Math.floor(rand() * pick.length)]
+}
+
+// An echo's next guess. Gentle is often careless (only keeps its greens); even picks any answer still possible;
+// fierce picks the possible answer whose letters cover the rest best. Each opens with a strong first word.
+export function echoGuess(answers: string[], rows: Row[], skill: number, rand = Math.random) {
+  if (!rows.length) return skill === 0 ? answers[Math.floor(rand() * answers.length)] : top(answers, coverage(answers), rand)
+  const left = possible(answers, rows)
+  if (!left.length) return answers[Math.floor(rand() * answers.length)] // the answer isn't one it knows: guess
+  if (skill === 0 && rand() < 0.2) {
+    const greens = rows.flatMap(r => r.marks.map((m, i) => (m === 'correct' ? [i, r.word[i]] : null)).filter(Boolean)) as [number, string][]
+    const loose = answers.filter(w => greens.every(([i, ch]) => w[i] === ch) && !rows.some(r => r.word === w))
+    if (loose.length) return loose[Math.floor(rand() * loose.length)]
+  }
+  return skill === 2 ? top(left, coverage(left), rand) : left[Math.floor(rand() * left.length)]
+}
