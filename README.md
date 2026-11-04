@@ -25,6 +25,7 @@ https://github.com/user-attachments/assets/45bbfa04-e233-458d-8001-7856e0133c96
 - [What you see](#what-you-see)
 - [What you hear](#what-you-hear)
 - [Combos and scoring](#combos-and-scoring)
+- [Playing together](#playing-together)
 - [HDR](#hdr)
 - [Running it](#running-it)
 - [How it works](#how-it-works)
@@ -79,6 +80,49 @@ The side panel shows your guesses, streak and progress on the left, and time and
 | Amber letter | 25 |
 | Solving | 500 × (7 − guesses used) |
 
+## Playing together
+
+Up to 8 people, peer to peer, with no server of ours in the middle.
+
+- **Join with a word.** Click the two-squares icon in the bottom-left corner. You get a room named by a five-letter
+  word, like `amber`. Share the link (`wordleffect.vercel.app/#amber`), or have friends type the word on the board.
+- **Everyone else is a panel.** Their boards sit beside yours, showing colours only, never letters. Each player is a
+  colour: rose, gold, fern, mint, teal, sky, iris, violet.
+- **Same words for everyone.** You all play the same list of words, each at your own pace.
+- **Locks.** A long streak, or a solve in 3 guesses or fewer, sends locks to whoever is ahead. They wait beside that
+  player's board and freeze rows when they next guess. A lock never takes your last row. Locks you earn melt your
+  own waiting ones first.
+- **You can hear each other.** When a friend finds a letter, its note sounds faintly from their side of the screen.
+
+### Modes
+
+| Mode | How it works |
+| --- | --- |
+| Last light | Fail a word and your light goes out. The last one lit wins. Every 3 minutes, every board loses a row. |
+| Tide | A timed race (3, 5 or 10 minutes). Highest score wins. |
+| Stars | First to solve 3 words (or 5) wins. |
+
+### Room settings
+
+Whoever made the room sets these in the lobby: the mode, rows per board (4 to 8), locks (off, gentle, fierce),
+seats (2 to 8) and any of the trials below. Each trial that's on multiplies your points by 1.25.
+
+| Trial | What changes |
+| --- | --- |
+| Strict | Letters you found must stay: greens in place, ambers somewhere in the word. |
+| Undertow | 8 bars per guess. Run out and a row freezes. On your last row, you lose the word. |
+| Fading | Colours drain from your board after a few seconds, and the keyboard keeps none. Play from memory. |
+| Heavy frost | Frozen rows carry into your next word. A solve in 3 or fewer thaws one. |
+
+### Good to know
+
+- Public Nostr relays introduce the players to each other. After that, the game goes browser to browser over WebRTC.
+- Like any peer-to-peer game, the people you play with can see your IP address.
+- Some networks block WebRTC, such as VPNs (Cloudflare WARP blocks it) and some office or mobile networks. If friends
+  can't find each other, try turning the VPN off.
+- To try it alone, open two tabs on `localhost:5173/?local#amber`. `?local` connects tabs of one browser directly,
+  with no network at all.
+
 ## HDR
 
 On an HDR display the brightest moments, like the letter flashes, spark cores and glints on the shards, are drawn
@@ -107,7 +151,7 @@ npm run dev
 Then open http://localhost:5173. Other scripts:
 
 ```bash
-npm test         # rules: scoring, chains, energy, tension, keyboard states
+npm test         # rules: scoring, chains, energy, tension, keyboard states, locks, word order
 npm run build    # type-check and build to dist/
 npm run lint     # oxlint
 ```
@@ -124,6 +168,8 @@ the piano. Though, any other sample works just fine offline since they're synthe
 | [`src/fx.ts`](src/fx.ts) | The light: the school, bursts, galaxy, frame, waves and the letter flashes |
 | [`src/gpu.ts`](src/gpu.ts) | A small instanced renderer: WebGPU with HDR, or WebGL2 |
 | [`src/audio.ts`](src/audio.ts) | The music: piano sampler, synths, reverb, echo, the beat grid and the drone |
+| [`src/net.ts`](src/net.ts) | Playing together: rooms, the host, and checking every message from other players |
+| [`src/Room.tsx`](src/Room.tsx) | Room settings and the other players' panels |
 | [`src/words.ts`](src/words.ts) | Answer list and guess validation ([`valid.txt`](src/valid.txt)) |
 | [`src/index.css`](src/index.css) | Tiles, keyboard, HUD and their animations |
 
@@ -146,12 +192,12 @@ A few details worth knowing:
 - No internet, no piano. The rest of the music still plays.
 - Random word each round, no daily puzzle or saved stats.
 - HDR in Safari isn't confirmed yet (see [HDR](#hdr)).
+- Playing together needs WebRTC, which some VPNs and networks block (see [Good to know](#good-to-know)).
 
 ## Planned
 
 - Daily puzzle and stats (all done and saved in browser locally, date is hashed).
 - WordlEffect bot that analyzes your guesses.
-- Multi-player mode.
 
 ## Credits
 
@@ -159,6 +205,7 @@ A few details worth knowing:
   via the [Tone.js](https://tonejs.github.io/) sample host.
 - Word list derived from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT).
 - Claude Opus 5.5.
+- Peer-to-peer rooms by [Trystero](https://github.com/dmotz/trystero) (MIT).
 - Built with React, TypeScript and Vite.
 - Inspired by [Wordle](https://www.nytimes.com/games/wordle/) and [Tetris Effect](https://www.tetriseffect.game/).
   WordlEffect is an independent fan project, not affiliated with or endorsed by The New York Times, Enhance or The Tetris
