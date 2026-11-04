@@ -191,7 +191,8 @@ the piano. Though, any other sample works just fine offline since they're synthe
 | [`src/audio.ts`](src/audio.ts) | The music: piano sampler, synths, reverb, echo, the beat grid and the drone |
 | [`src/net.ts`](src/net.ts) | Playing together: rooms, the host, and checking every message from other players |
 | [`src/Room.tsx`](src/Room.tsx) | Room settings and the other players' panels |
-| [`src/words.ts`](src/words.ts) | Answer list and guess validation ([`valid.txt`](src/valid.txt)) |
+| [`src/skills.ts`](src/skills.ts) | The six skills: names, what they do, and how often the reel lands on each |
+| [`src/words.ts`](src/words.ts) | English and Indonesian answers and guesses ([`valid.txt`](src/valid.txt), [`id/`](src/id/NOTICE.md)) |
 | [`src/index.css`](src/index.css) | Tiles, keyboard, HUD and their animations |
 
 A few details worth knowing:
