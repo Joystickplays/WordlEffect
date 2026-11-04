@@ -392,6 +392,15 @@ export class FX {
     setTimeout(() => this.burst(b.x, b.y, 16 * n, { col: ICE, speed: [30, 160], life: [0.6, 1.4], scale: 0.8, sparks: 0.1, hot: 2 }), 1000)
   }
 
+  // Jinx: both boards fire at each other and the sparks collide halfway.
+  jinx(a: Pt, b: Pt, ha: number, hb: number) {
+    this.stream(a, b, ha, 1)
+    this.stream(b, a, hb, 1)
+    this.poke(0.03, 0.5)
+    this.rim.xv += 90
+    setTimeout(() => this.burst((a.x + b.x) / 2, (a.y + b.y) / 2, 60, { col: () => hsl(rand(0, 360), 1, 0.7), speed: [60, 360], life: [0.6, 1.4], sparks: 0.3, hot: 3 }), 550)
+  }
+
   // A row freezing shut: each tile flashes cold and sheds a few ice shards.
   frost(row: Tile[]) {
     this.poke(-0.03, 0.15)

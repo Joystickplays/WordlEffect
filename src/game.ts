@@ -100,3 +100,10 @@ export function strictBreak(word: string, rows: { word: string; marks: Mark[] }[
 }
 
 export const trialBonus = (trials: number) => 1 + 0.25 * trials
+
+// A short fingerprint of a guess (FNV-1a), so Jinx can spot two players typing the same word without sending letters.
+export function hash(s: string) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193)
+  return h >>> 0
+}

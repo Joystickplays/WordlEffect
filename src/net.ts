@@ -8,7 +8,7 @@ export { selfId }
 export const V = 2 // bump when messages change shape, so mismatched versions say so instead of misbehaving
 
 export type Mode = 'light' | 'tide' | 'stars'
-export const TRIALS = ['strict', 'undertow', 'fading', 'frost'] as const
+export const TRIALS = ['strict', 'undertow', 'fading', 'frost', 'squatter', 'potato', 'rigged', 'jinx'] as const
 export type Trial = (typeof TRIALS)[number]
 export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number; lang: Lang }
 export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3, lang: 'en' }
@@ -19,7 +19,7 @@ export const COLOURS = [['rose', 340], ['gold', 45], ['fern', 100], ['mint', 150
 
 export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; round: number; seats: Record<string, number> }
 // One player's whole panel. Marks only ("ccpaa"), never letters.
-export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[] }
+export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[] }
 export type Lock = { to: string; n: number }
 type Hello = { v: number; since: number }
 
@@ -29,7 +29,7 @@ const num = (x: unknown, lo: number, hi: number) => typeof x === 'number' && Num
 const int = (x: unknown, lo: number, hi: number) => num(x, lo, hi) && Number.isInteger(x)
 
 const okSettings = (s: unknown) =>
-  obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 15) &&
+  obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 255) &&
   int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number) && (s.lang === 'en' || s.lang === 'id')
 const okRoom = (r: unknown): r is Room =>
   obj(r) && okSettings(r.settings) && (r.phase === 'lobby' || r.phase === 'play') && int(r.seed, 0, 2 ** 32) && int(r.round, 0, 1e6) &&
@@ -38,7 +38,8 @@ const okMe = (m: unknown): m is Me =>
   obj(m) && int(m.round, 0, 1e6) && int(m.n, 0, 1e5) && Array.isArray(m.rows) && m.rows.length <= 8 &&
   m.rows.every(r => typeof r === 'string' && /^[cpa]{0,5}$/.test(r)) && int(m.typed, 0, 5) && int(m.sealed, 0, 8) &&
   int(m.pending, 0, 99) && num(m.score, 0, 1e9) && num(m.energy, 0, 1) && typeof m.out === 'boolean' && typeof m.done === 'boolean' &&
-  Array.isArray(m.stars) && m.stars.length <= 5 && m.stars.every(t => num(t, 0, 1e8))
+  Array.isArray(m.stars) && m.stars.length <= 5 && m.stars.every(t => num(t, 0, 1e8)) &&
+  Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32))
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
 
 export type Handlers = {

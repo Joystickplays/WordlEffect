@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, type Mark, type Stats } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock } from './net.ts'
@@ -19,6 +19,7 @@ const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, s
 const freshMatch = () => ({
   live: false, round: 0, S: DEFAULTS, seats: {} as Record<string, number>, order: [] as number[], n: 0, start: 0,
   score: 0, pending: 0, sealed: 0, locked: 0, carry: 0, out: false, done: false, ended: false, stars: [] as number[], claim: 0,
+  said: [] as number[], jinxed: [] as string[], // this word's guess fingerprints, and jinxes already settled
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
@@ -202,7 +203,12 @@ export default function App() {
       return flash('keep the light you found')
     }
     setLate(false)
-    const r = rows.length, word = cur, marks = score(word, answer), s = stats.current
+    const r = rows.length, word = cur, marks = score(word, answer), s = stats.current, m = mp.current
+    if (m.live) {
+      const h = hash(`${m.round}:${m.n}:${word}`)
+      m.said = [...m.said, h]
+      for (const id of peersRef.current) if (snapsRef.current[id]?.round === m.round && snapsRef.current[id].said.includes(h)) jinx(id, h, r + 1)
+    }
     const chain = chains(marks), isNew = marks.map((m, i) => m === 'correct' && !s.greens.has(i))
     s.guesses++
     setRows([...rows, { word, marks }])
@@ -436,6 +442,7 @@ export default function App() {
 
   function nextWord() {
     const m = mp.current
+    m.said = []
     // dusk: in Last light, every 3 minutes every board loses a row for good, down to 3, so matches always end
     const dusk = m.S.mode === 'light' ? Math.min(m.S.rows - 3, Math.floor((performance.now() - m.start) / 180000)) : 0
     m.locked = Math.min(m.carry, m.S.rows - 1 - dusk)
@@ -524,6 +531,19 @@ export default function App() {
     snd.current.seal()
   }
 
+  // Jinx: you and someone else guessed the same word on the same word number. You both lose a row.
+  function jinx(id: string, h: number, used: number) {
+    const m = mp.current, key = `${id}:${h}`, el = panelEls.current[id]
+    if (!has(m.S, 'jinx') || m.jinxed.includes(key) || m.out || m.done || m.ended) return
+    m.jinxed = [...m.jinxed, key]
+    const name = COLOURS[m.seats[id] ?? 0][0]
+    flash(`jinx! · ${name}`)
+    say(`Jinx with ${name}: you both lose a row`)
+    snd.current.jinx(side(id))
+    if (el) fx.current.jinx(center(board.current), center(el), hueOf(selfId), hueOf(id))
+    if (m.S.rows - m.sealed - used > 1) seal(1, false)
+  }
+
   // Send locks to the brightest other player still lit.
   function fire(n: number) {
     const m = mp.current, snaps = snapsRef.current
@@ -561,6 +581,7 @@ export default function App() {
       round: m.round, n: m.n, typed: m.live && phase === 'play' ? cur.length : 0, sealed: m.live ? m.sealed : 0, pending: m.pending,
       rows: m.live ? rows.map((row, i) => (i === rows.length - 1 ? row.marks.slice(0, shown) : row.marks).map(x => x[0]).join('')) : [],
       score: Math.round(m.score), energy: Math.round(energy * 100) / 100, out: m.out, done: m.done, stars: m.stars.map(Math.round),
+      said: m.live ? m.said : [],
     }
   }
   const sendMe = useEffectEvent(() => net.current?.me(snapshot()))
@@ -572,6 +593,8 @@ export default function App() {
     snapsRef.current = { ...snapsRef.current, [id]: m }
     setSnaps(snapsRef.current)
     checkEnd()
+    const me = mp.current
+    if (me.live && m.round === me.round) for (const h of m.said) if (me.said.includes(h)) jinx(id, h, rows.length)
     if (!prev || prev.round !== m.round || prev.n !== m.n) return
     const r = m.rows.length - 1, was = prev.rows[r] ?? ''
     for (let c = was.length; c < (m.rows[r]?.length ?? 0); c++) if (m.rows[r][c] === 'c') snd.current.far(c, pan)

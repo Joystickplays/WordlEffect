@@ -564,6 +564,24 @@ export class Sound {
     this.glass(r + 48, t + 0.05, 0.04, { dur: 2, rev: 0.9, echo: 0.3, scoop: false })
   }
 
+  // Jinx: a playful "uh-oh", a falling minor third that wobbles, from between your board and theirs.
+  jinx(pan: number) {
+    if (!this.ctx) return
+    const c = this.ctx, t = c.currentTime
+    this.glass(84, t, 0.09, { pan: pan / 2, dur: 1.2, rev: 0.6, echo: 0.3, scoop: false })
+    this.glass(81, t + EIGHTH, 0.09, { pan: pan / 2, dur: 1.6, rev: 0.6, echo: 0.3, scoop: false })
+    const o = c.createOscillator(), g = c.createGain()
+    o.frequency.setValueAtTime(mtof(72), t + BEAT)
+    o.frequency.exponentialRampToValueAtTime(mtof(60), t + BEAT + 0.35) // boing
+    g.gain.setValueAtTime(0, t + BEAT)
+    g.gain.linearRampToValueAtTime(0.05, t + BEAT + 0.02)
+    g.gain.setTargetAtTime(0, t + BEAT + 0.05, 0.12)
+    o.connect(g)
+    this.send(g, 0.5, 0.4, 0.2)
+    o.start(t + BEAT)
+    o.stop(t + BEAT + 0.8)
+  }
+
   // A friend's light going out: a soft falling pair.
   fall(pan: number) {
     if (!this.ctx) return

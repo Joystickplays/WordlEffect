@@ -4,7 +4,7 @@ import { COLOURS, type Me, type Mode, type Settings } from './net.ts'
 const MODES: Mode[] = ['light', 'tide', 'stars']
 const MODE_NAMES = { light: 'last light', tide: 'tide', stars: 'stars' }
 const LOCKS = ['off', 'gentle', 'fierce']
-const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost']
+const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost', 'squatter', 'hot potato', 'rigged', 'jinx']
 const MARK = { c: 'correct', p: 'present', a: 'absent' } as const
 const after = <T,>(list: readonly T[], v: T) => list[(list.indexOf(v) + 1) % list.length]
 const still = (e: { preventDefault(): void }) => e.preventDefault() // keep focus off, so Enter still reaches the board
@@ -18,6 +18,10 @@ const ABOUT: Record<string, string> = {
   undertow: "You get about 23 seconds for each guess. Take longer and one of your rows freezes. If it's your last row, you lose that word.",
   fading: "Colours fade from your board a few seconds after each guess, and the keyboard doesn't keep them. You have to remember what you found.",
   'heavy frost': "Frozen rows stay frozen when you start a new word. Solving a word in 3 guesses or fewer melts one of them.",
+  squatter: "Locks don't freeze rows any more. Instead, each one drops a random letter into a box on your next row, and you can't delete it. Your guess has to work around it.",
+  'hot potato': "A hot potato sits on someone's board with a hidden timer. Solve a word to throw it at the leader. Whoever holds it when it goes off gets 3 locks.",
+  rigged: "When the leader finishes a word, the player in last place picks the leader's next word from three nasty ones.",
+  jinx: "If you guess exactly the same word as someone else, on the same word number, you both lose a row. Common openers get dangerous.",
 }
 
 // A small (i) that springs open a plain-English explanation. Clicking anywhere else, or Escape, closes it.

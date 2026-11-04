@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash } from './game.ts'
 
 test('score handles exact, misplaced and duplicate letters', () => {
   assert.deepEqual(score('crane', 'crane'), Array(5).fill('correct'))
@@ -95,4 +95,11 @@ test('strict keeps the light you found', () => {
   const amber = [{ word: 'stare', marks: score('stare', 'react') }]
   assert.equal(strictBreak('irate', amber), null)
   assert.equal(strictBreak('grand', amber), 't')
+})
+
+test('jinx fingerprints match only the same guess on the same word', () => {
+  assert.equal(hash('1:3:crane'), hash('1:3:crane'))
+  assert.notEqual(hash('1:3:crane'), hash('1:4:crane'))
+  assert.notEqual(hash('1:3:crane'), hash('1:3:crate'))
+  assert.ok(hash('x') >= 0 && hash('x') < 2 ** 32)
 })
