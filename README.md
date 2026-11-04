@@ -35,6 +35,8 @@ https://github.com/user-attachments/assets/45bbfa04-e233-458d-8001-7856e0133c96
 
 ## Playing
 
+The faint **EN / ID** in the bottom-left corner switches between English and Indonesian words.
+
 Type a five-letter word and press **Enter**. Each letter is checked in turn, on the beat:
 
 | Tile | Meaning |
@@ -105,7 +107,8 @@ Up to 8 people, peer to peer, with no server of ours in the middle.
 ### Room settings
 
 Whoever made the room sets these in the lobby: the mode, rows per board (4 to 8), locks (off, gentle, fierce),
-seats (2 to 8) and any of the trials below. Each trial that's on multiplies your points by 1.25.
+the language (English or Indonesian), seats (2 to 8), skills (on or off) and any of the trials below. Each trial
+that's on multiplies your points by 1.25. Every mode and trial has a small (i) that explains it.
 
 | Trial | What changes |
 | --- | --- |
@@ -113,6 +116,24 @@ seats (2 to 8) and any of the trials below. Each trial that's on multiplies your
 | Undertow | 8 bars per guess. Run out and a row freezes. On your last row, you lose the word. |
 | Fading | Colours drain from your board after a few seconds, and the keyboard keeps none. Play from memory. |
 | Heavy frost | Frozen rows carry into your next word. A solve in 3 or fewer thaws one. |
+| Squatter | Locks stamp a letter you can't delete into your next row instead of freezing it. Your guess works around it. |
+| Hot potato | A potato with a hidden fuse sits on someone's board. Solve a word to throw it at the leader. Whoever holds it when it goes off takes 3 locks. |
+| Rigged | When you're in last place, you pick the leader's next word from three nasty ones. |
+| Jinx | Guess exactly the same word as someone else on the same word number, and you both lose a row. |
+
+### Skills
+
+With skills on, every word you solve spins a reel and gives you a skill. You hold up to three; press **1**, **2** or
+**3** (or click the slot) to use one. Everyone can see everyone's skills.
+
+| Skill | What it does |
+| --- | --- |
+| Thaw | Melts all your frozen rows and any locks waiting for you. |
+| Lantern | Lights up one letter of your answer in its right box. |
+| Second wind | Your next wrong guess blows away and doesn't use up a row. |
+| Decoy | The next 2 locks aimed at you go to someone random instead. |
+| Mirror shield (rare) | The next lock or swap aimed at you bounces back to whoever sent it. |
+| Swap (legendary) | Trade boards mid-word with the leader, or click any board to pick someone else. |
 
 ### Good to know
 
@@ -204,6 +225,10 @@ A few details worth knowing:
 - Piano: [Salamander Grand Piano](https://sfzinstruments.github.io/pianos/salamander) by Alexander Holm, CC-BY 3.0,
   via the [Tone.js](https://tonejs.github.io/) sample host.
 - Word list derived from [an-array-of-english-words](https://github.com/words/an-array-of-english-words) (MIT).
+- Indonesian guesses from the hunspell-id dictionary by the hunspell-id authors, via
+  [LibreOffice/dictionaries](https://github.com/LibreOffice/dictionaries) (LGPL-3.0); answers ranked with
+  [hermitdave/FrequencyWords](https://github.com/hermitdave/FrequencyWords) (CC-BY-SA 4.0). See
+  [src/id/NOTICE.md](src/id/NOTICE.md).
 - Claude Opus 5.5.
 - Peer-to-peer rooms by [Trystero](https://github.com/dmotz/trystero) (MIT).
 - Built with React, TypeScript and Vite.
