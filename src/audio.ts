@@ -537,9 +537,10 @@ export class Sound {
   }
 
   // A friend finds a letter: that column's note, faint and far off, from their side of the screen.
-  far(col: number, pan: number) {
+  far(col: number, pan: number, echo = false) {
     if (!this.ctx) return
-    this.glass(ARP[col] + 12, this.ctx.currentTime + rand(0, 0.04), 0.035, { pan, dur: 2.4, rev: 1, echo: 0.5, scoop: false })
+    // an echo's sounds an octave lower and duller, with more of the delay: it really is an echo
+    this.glass(ARP[col] + (echo ? 0 : 12), this.ctx.currentTime + rand(0, 0.04), echo ? 0.03 : 0.035, { pan, dur: echo ? 1.6 : 2.4, rev: 1, echo: echo ? 0.75 : 0.5, scoop: false })
   }
 
   // Locks sent: a quick rising glass figure, flying toward whoever they're aimed at.

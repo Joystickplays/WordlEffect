@@ -21,8 +21,9 @@ export const COLOURS = [['rose', 340], ['gold', 45], ['fern', 100], ['mint', 150
 // sides: each player's team (0 dawn, 1 dusk); echoes: the bots' ids in an echoes match
 export type Room = { settings: Settings; phase: 'lobby' | 'play'; seed: number; round: number; seats: Record<string, number>; sides: Record<string, number>; echoes: string[] }
 // One player's whole panel. Marks only ("ccpaa"), never letters.
-export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean; bag: string; guard: string }
-export type Lock = { to: string; n: number }
+export type Me = { round: number; n: number; rows: string[]; typed: number; sealed: number; pending: number; score: number; energy: number; out: boolean; done: boolean; stars: number[]; said: number[]; squat: number[]; rigged: boolean; bag: string; guard: string; bot?: string }
+// bot / by: an echo's snapshot or lock, sent on its behalf by the host
+export type Lock = { to: string; n: number; by?: string }
 // Everything else players do to each other: rigging a word, swapping boards.
 export type Board = { answer: string; rows: string[]; sealed: number }
 export type Swap = { k: 'swap'; to: string; reply: boolean; ok: boolean; bounced: boolean; board: Board | null }
@@ -51,7 +52,8 @@ const okMe = (m: unknown): m is Me =>
   Array.isArray(m.said) && m.said.length <= 8 && m.said.every(h => int(h, 0, 2 ** 32)) &&
   Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4)) && typeof m.rigged === 'boolean' &&
   typeof m.bag === 'string' && /^[tlwdms]{0,3}$/.test(m.bag) && typeof m.guard === 'string' && /^[mdw]{0,3}$/.test(m.guard)
-const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6)
+const echo = (x: unknown) => x === undefined || (typeof x === 'string' && /^echo\d$/.test(x))
+const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6) && echo(l.by)
 const id = (x: unknown) => typeof x === 'string' && x.length < 64
 const okEv = (e: unknown): e is Ev =>
   obj(e) && id(e.to) &&
@@ -125,14 +127,16 @@ export function connect(word: string, on: Handlers) {
     changed()
   }
   roomA.onMessage = (r, { peerId }) => void (known.has(peerId) && peerId === host() && okRoom(r) && on.room(r))
-  meA.onMessage = (m, { peerId }) => void (known.has(peerId) && okMe(m) && on.me(m, peerId))
-  lockA.onMessage = (l, { peerId }) => void (known.has(peerId) && okLock(l) && on.lock(l, peerId))
+  // only the host speaks for echoes
+  meA.onMessage = (m, { peerId }) => void (known.has(peerId) && okMe(m) && echo(m.bot) && (!m.bot || peerId === host()) && on.me(m, m.bot ?? peerId))
+  lockA.onMessage = (l, { peerId }) => void (known.has(peerId) && okLock(l) && (!l.by || peerId === host()) && on.lock(l, l.by ?? peerId))
   evA.onMessage = (e, { peerId }) => void (known.has(peerId) && okEv(e) && on.ev(e, peerId))
 
   return {
     room: (r: Room) => void roomA.send(r),
-    me: (m: Me) => void meA.send(m),
-    lock: (l: Lock) => void lockA.send(l),
+    // an echo's board and locks reach the host too, the same way they reach everyone else
+    me: (m: Me) => void (meA.send(m), m.bot && on.me(m, m.bot)),
+    lock: (l: Lock) => void (lockA.send(l), l.by && on.lock(l, l.by)),
     ev: (e: Ev, to?: string) => void evA.send(e, { target: to }),
     leave: () => void room.leave(),
   }

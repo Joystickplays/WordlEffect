@@ -14,6 +14,7 @@ const still = (e: { preventDefault(): void }) => e.preventDefault() // keep focu
 
 // What each mode and trial means, in plain words.
 const ABOUT: Record<string, string> = {
+  echoes: 'How good the echoes are. Gentle ones take their time and are sometimes careless; even ones think steadily and never waste a guess; fierce ones are quick and pick the most telling word.',
   versus: 'Everyone: each player for themselves. Teams: two teams, dawn and dusk, add up their points; locks only fly at the other team, and the locks you earn melt your teammates\' first. Echoes: everyone is one team against the same number of bots. In every case, the mode decides how a team wins.',
   light: "Get a word wrong and you're out. The last player still going wins. Every 3 minutes, every board loses a row, so the match can't go on forever.",
   tide: 'A race against the clock. Solve as many words as you can before time runs out. The highest score wins.',
@@ -79,6 +80,7 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
         <Choice label="Rows" value={s.rows} onClick={ch(cur => ({ rows: cur.rows === 8 ? 4 : cur.rows + 1 }))} />
         <Choice label="Locks" value={LOCKS[s.locks]} onClick={ch(cur => ({ locks: (cur.locks + 1) % 3 }))} />
         <Choice label="Words" value={s.lang === 'en' ? 'English' : 'Indonesian'} onClick={ch(cur => ({ lang: cur.lang === 'en' ? 'id' : 'en' }))} />
+        {s.versus === 'echoes' && <Choice label="Echoes" value={['gentle', 'even', 'fierce'][s.echoes]} onClick={ch(cur => ({ echoes: (cur.echoes + 1) % 3 }))} about="echoes" />}
         <Choice label="Versus" value={VERSUS[s.versus]} onClick={ch(cur => ({ versus: after(['all', 'teams', 'echoes'] as const, cur.versus) }))} about="versus" />
       </>
     )
@@ -123,10 +125,10 @@ export function Which({ n, out, done }: { n: number; out?: boolean; done?: boole
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0 }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void; side?: number; row?: number }) {
-  const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
+export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0, echo }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void; side?: number; row?: number; echo?: string }) {
+  const [hue, h] = COLOURS[seat], name = echo ?? hue, marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
-    <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''} ${side >= 0 ? `side-${side}` : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0, gridRow: row || undefined } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
+    <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''} ${side >= 0 ? `side-${side}` : ''} ${echo ? 'echo' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0, gridRow: row || undefined } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
       <div className="board peer" aria-hidden="true">
         {Array.from({ length: rows }, (_, r) => (
           <div key={r} className={`row ${r >= rows - sealed ? 'sealed' : ''}`}>

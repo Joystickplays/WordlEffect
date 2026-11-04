@@ -1214,3 +1214,15 @@ canvas.fx {
 .rank li.side-1 b {
   color: rgb(170 205 255 / 0.9);
 }
+
+/* Echoes: a pale, grey-glass twin of a player's board */
+.panel.echo .board.peer {
+  filter: saturate(0.35) brightness(0.85) drop-shadow(0 0 calc(4px + 14px * var(--pe)) rgb(180 190 220 / 0.25));
+}
+.panel.echo .board.peer .tile {
+  border-style: dashed;
+}
+.panel.echo figcaption > span {
+  font-style: italic;
+  color: hsl(var(--h) 25% 72% / 0.6);
+}

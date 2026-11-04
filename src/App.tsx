@@ -6,6 +6,7 @@ import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
 import { Setup, Panel, Which, Icon } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
+import { Echo } from './echoes.ts'
 
 const ROWS = 6
 const COLS = 5
@@ -19,6 +20,11 @@ const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answer
 const SHARDS = Array.from({ length: 64 }, (_, i) => ({
   '--a': `${(i / 64) * 360 + Math.random() * 12}deg`, '--d': `${120 + Math.random() * 260}px`, '--s': `${2 + Math.random() * 3}px`, '--t': `${Math.random() * 0.25}s`,
 }))
+// Echoes are twins: echo0 belongs to the first player by seat, and so on. They wear their twin's colour.
+const twinIn = (r: Room | null, id: string) => (r ? Object.keys(r.seats).sort((a, b) => r.seats[a] - r.seats[b])[+id.slice(4)] : undefined)
+const seatIn = (r: Room | null, id: string) => (r ? (r.seats[id] ?? r.seats[twinIn(r, id) ?? ''] ?? 0) : 0)
+const nameIn = (r: Room | null, id: string) => COLOURS[seatIn(r, id)][0] + (id.startsWith('echo') ? "'s echo" : '')
+
 // Which team a player is on: -1 when it's everyone for themselves.
 function teamIn(r: Room | null, id: string) {
   if (!r || r.settings.versus === 'all') return -1
@@ -36,6 +42,7 @@ const freshMatch = () => ({
   rig: null as { word: string; by: string } | null, // Rigged: the next word someone picked for us
   bag: [] as Skill[], dusk: 0, wind: false, decoy: 0, mirror: false, // Skills: what we hold, and what's switched on
   swap: '', // Swap: who we've asked, while we wait for their board
+  echoes: [] as string[], echoHost: '', // Echoes: their ids, and who runs them
 })
 const clockText = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
 
@@ -103,12 +110,14 @@ export default function App() {
   const [guard, setGuard] = useState('') // skills switched on: m(irror), d(ecoy), w(ind)
   const [rig, setRig] = useState<{ to: string; words: string[]; until: number } | null>(null) // Rigged: our pick of their next word
   const [late, setLate] = useState(false) // Undertow trial: the clock on this guess is nearly out
+  const [run, setRun] = useState({ n: 0, out: false, done: false, stars: 0 }) // the match ref, as render needs it
   const [ended, setEnded] = useState<{ line: string; rank: { id: string; score: number }[] } | null>(null)
 
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
   const fx = useRef<FX>(null!), snd = useRef<Sound>(null!), stats = useRef(fresh())
   const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([]), hostRef = useRef('')
+  const bots = useRef<Record<string, Echo>>({}) // echoes, when we're the host running them
   const mp = useRef(freshMatch()), snapsRef = useRef<Record<string, Me>>({}), panelEls = useRef<Record<string, HTMLElement | null>>({})
   const limit = room ? room.settings.rows : ROWS
   const lang = room ? room.settings.lang : solo
@@ -117,7 +126,9 @@ export default function App() {
   const teams = !!room && room.settings.versus !== 'all'
   const teamOf = (id: string) => teamIn(room, id)
   // your team first, then the other; within a team, by seat
-  const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => (teams ? Math.abs(teamOf(a) - teamOf(selfId)) - Math.abs(teamOf(b) - teamOf(selfId)) : 0) || room.seats[a] - room.seats[b]) : []
+  const humans = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => (teams ? Math.abs(teamOf(a) - teamOf(selfId)) - Math.abs(teamOf(b) - teamOf(selfId)) : 0) || room.seats[a] - room.seats[b]) : []
+  const echoes = live && room ? [...room.echoes].sort((a, b) => [selfId, ...humans].indexOf(twinIn(room, a) ?? '') - [selfId, ...humans].indexOf(twinIn(room, b) ?? '')) : [] // each under its twin
+  const others = [...humans, ...echoes]
   const boards = 1 + others.length, mates = teams ? 1 + others.filter(id => teamOf(id) === teamOf(selfId)).length : 0
   const cols = teams ? Math.max(mates, boards - mates, 1) : boards <= 4 ? boards : Math.ceil(boards / 2)
   const side = (id: string) => (cols > 1 ? -0.6 + (1.2 * ((others.indexOf(id) + 1) % cols)) / (cols - 1) : 0) // pan by which column their board is in
@@ -126,9 +137,10 @@ export default function App() {
   const ready = !room ? false : room.settings.versus === 'echoes' ? seated >= 1 : room.settings.versus === 'teams' ? [0, 1].every(t => here.some(id => teamOf(id) === t)) : seated >= 2
   const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
   // team totals, for the HUD: your own score plus everyone else's latest
-  const score2 = [0, 1].map(t => (teams ? (teamOf(selfId) === t ? total : 0) + others.filter(id => teamOf(id) === t).reduce((s, id) => s + (snaps[id]?.round === mp.current.round ? snaps[id].score : 0), 0) : 0))
+  const score2 = [0, 1].map(t => (teams ? (teamOf(selfId) === t ? total : 0) + others.filter(id => teamOf(id) === t).reduce((s, id) => s + (snaps[id]?.round === room?.round ? snaps[id].score : 0), 0) : 0))
   const TEAM_NAMES = room?.settings.versus === 'echoes' ? ['team', 'echoes'] : ['dawn', 'dusk']
-  const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
+  const hueOf = (id: string) => COLOURS[seatIn(room, id)][1]
+  const nameOf = (id: string) => nameIn(room, id)
 
   useEffect(() => {
     const f = (fx.current = new FX(canvas.current))
@@ -167,8 +179,10 @@ export default function App() {
   // Tide: when the time is up, you stop; the match ends once everyone has.
   const tideCheck = useEffectEvent(() => {
     const m = mp.current
+    for (const e of Object.values(bots.current)) e.tick()
     if (!m.live || m.S.mode !== 'tide' || m.done || m.ended || !m.start || performance.now() - m.start < m.S.tide * 60000) return
     m.done = true
+    bump()
     setCur('')
     if (phase === 'play') setPhase('over')
     net.current?.me(snapshot())
@@ -406,6 +420,7 @@ export default function App() {
   }
 
   function leave() {
+    sleep()
     mp.current = freshMatch()
     setLive(false)
     setEnded(null)
@@ -425,7 +440,7 @@ export default function App() {
     const prev = roomRef.current
     roomRef.current = r
     setRoom(r)
-    for (const id in r.seats) if (id !== selfId && !(prev && id in prev.seats)) say(`${COLOURS[r.seats[id]][0]} is here`)
+    for (const id in r.seats) if (id !== selfId && !(prev && id in prev.seats)) say(`${nameOf(id)} is here`)
     const m = mp.current
     if (r.phase === 'play' && selfId in r.seats && r.round !== m.round) begin(r)
     else if (r.phase === 'lobby' && m.live) backToLobby()
@@ -444,7 +459,7 @@ export default function App() {
     const seats: Record<string, number> = {}
     for (const id of [selfId, ...ids]) if (id in r.seats) seats[id] = r.seats[id]
     for (const id of [selfId, ...ids])
-      if (!(id in seats) && Object.keys(seats).length < r.settings.seats) seats[id] = COLOURS.findIndex((_, i) => !Object.values(seats).includes(i))
+      if (!(id in seats) && Object.keys(seats).length < (r.settings.versus === 'echoes' ? Math.min(4, r.settings.seats) : r.settings.seats)) seats[id] = COLOURS.findIndex((_, i) => !Object.values(seats).includes(i))
     // sides: everyone keeps theirs, newcomers even the teams out
     const sides: Record<string, number> = {}
     for (const id in seats) if (id in r.sides) sides[id] = r.sides[id]
@@ -454,7 +469,7 @@ export default function App() {
 
   function peersChanged(ids: string[], h: string) {
     const r = roomRef.current
-    for (const id of peersRef.current) if (!ids.includes(id) && r && id in r.seats) say(`${COLOURS[r.seats[id]][0]} drifted away`)
+    for (const id of peersRef.current) if (!ids.includes(id) && r && id in r.seats) say(`${nameOf(id)} drifted away`)
     if (ids.length) setLine(l => (l === 'still looking for them' ? '' : l))
     peersRef.current = ids
     setPeers(ids)
@@ -497,12 +512,15 @@ export default function App() {
       if (!anyWord(cur)) return refuse('Not in word list')
       if (cur !== code) goTo(cur, true)
       else setCur('')
-    } else if (!cur && host && r && ready) publish({ ...seat(r, peersRef.current), phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32) })
+    } else if (!cur && host && r && ready) {
+      const s = seat(r, peersRef.current)
+      publish({ ...s, phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32), echoes: r.settings.versus === 'echoes' ? Object.keys(s.seats).map((_, i) => `echo${i}`) : [] })
+    }
   }
 
   // The host said go: a four-beat count-in on the Cmaj7, then everyone's first word.
   function begin(r: Room) {
-    const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, WORDS[r.settings.lang].answers.length) })
+    const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, WORDS[r.settings.lang].answers.length), echoes: r.echoes, echoHost: hostRef.current || selfId })
     restart()
     setLive(true)
     setRig(null)
@@ -523,6 +541,7 @@ export default function App() {
       m.start = performance.now()
       setClock({ start: Date.now(), end: 0, now: Date.now() })
       nextWord()
+      if (m.echoHost === selfId) wake(m)
     })
   }
 
@@ -538,8 +557,9 @@ export default function App() {
     const rigged = m.rig
     m.rig = null
     restart(rigged?.word ?? WORDS[m.S.lang].answers[m.order[m.n % m.order.length]], true)
+    bump()
     if (rigged) {
-      flash(`${COLOURS[m.seats[rigged.by] ?? 0][0]} picked this word`)
+      flash(`${nameOf(rigged.by)} picked this word`)
       snd.current.rigged(side(rigged.by))
       fx.current.rigged(center(board.current), hueOf(rigged.by))
     }
@@ -552,6 +572,7 @@ export default function App() {
       m.out = true
       setLine('your light rests')
     }
+    bump()
     if (m.out || m.done || m.ended || (m.S.mode === 'stars' && tm(selfId) < 0 && m.stars.length >= m.S.stars)) {
       setPhase('over')
       net.current?.me(snapshot())
@@ -564,7 +585,7 @@ export default function App() {
 
   // Rigged: after each of your words, if you're in last place, you choose the leader's next word from three nasty ones.
   function offerRig() {
-    const m = mp.current, others = foes(), snaps = snapsRef.current
+    const m = mp.current, others = foes().filter(p => !p.id.startsWith('echo')), snaps = snapsRef.current
     if (!has(m.S, 'rigged') || !others.length) return
     const lead = target(others)!
     if (tm(selfId) >= 0) {
@@ -586,23 +607,23 @@ export default function App() {
     const el = panelEls.current[r.to]
     if (el) fx.current.stream(center(board.current), center(el), 275, 2)
     snd.current.launch(side(r.to))
-    flash(`you rigged ${COLOURS[mp.current.seats[r.to] ?? 0][0]}'s next word`)
+    flash(`you rigged ${nameOf(r.to)}'s next word`)
   }
 
   function gotRig(e: Extract<Ev, { k: 'rig' }>, from: string) {
     const m = mp.current
     if (e.to !== selfId || !m.live || !has(m.S, 'rigged') || m.rig || !WORDS[m.S.lang].answers.includes(e.word)) return
     m.rig = { word: e.word, by: from }
-    flash(`${COLOURS[m.seats[from] ?? 0][0]} rigged your next word`)
+    flash(`${nameOf(from)} rigged your next word`)
     net.current?.me(snapshot())
   }
 
   // Everyone still here who was dealt into this match, with their latest panel.
   function players() {
     const m = mp.current, snaps = snapsRef.current
-    return Object.keys(m.seats)
-      .filter(id => id === selfId || peersRef.current.includes(id))
-      .map(id => (id === selfId ? { id, ...snapshot() } : { id, ...(snaps[id]?.round === m.round ? snaps[id] : { score: 0, out: false, done: false, stars: [] }) }))
+    return [...Object.keys(m.seats), ...m.echoes]
+      .filter(present)
+      .map(id => (id === selfId ? { id, ...snapshot() } : id.startsWith('echo') && !echoesAlive() ? { id, score: snaps[id]?.score ?? 0, out: true, done: true, stars: snaps[id]?.stars ?? [] } : { id, ...(snaps[id]?.round === m.round ? snaps[id] : { score: 0, out: false, done: false, stars: [] }) }))
   }
 
   function checkEnd() {
@@ -652,7 +673,7 @@ export default function App() {
   }
 
   function end(winner: string) {
-    const m = mp.current, name = COLOURS[m.seats[winner] ?? 0][0], mine = winner === selfId
+    const m = mp.current, name = nameOf(winner), mine = winner === selfId
     m.ended = true
     const rank = players().sort((a, b) => (a.id === winner ? -1 : b.id === winner ? 1 : b.score - a.score))
     const words = { light: mine ? 'last light' : `${name} shone longest`, tide: 'the tide is out', stars: mine ? (m.S.stars === 3 ? 'three stars' : 'five stars') : `${name} reached them first` }
@@ -661,6 +682,7 @@ export default function App() {
 
   function wrapUp(line: string, rank: { id: string; score: number }[], mine: boolean, words: string) {
     mp.current.ended = true
+    sleep()
     setEnded({ line, rank })
     setCur('')
     setPhase('over')
@@ -673,6 +695,7 @@ export default function App() {
   }
 
   function backToLobby() {
+    sleep()
     mp.current = freshMatch()
     setLive(false)
     setEnded(null)
@@ -794,7 +817,7 @@ export default function App() {
       return flash('click a board to swap with, or press again for the leader')
     }
     setAim(-1)
-    const to = at ?? target(foes())?.id
+    const to = at ?? target(foes().filter(p => !p.id.startsWith('echo')))?.id
     if (!to || phase !== 'play' || free <= 1 || m.swap) return snd.current.invalid()
     m.swap = to
     setPhase('busy')
@@ -819,7 +842,7 @@ export default function App() {
   }
 
   function gotSwap(e: Swap, from: string) {
-    const m = mp.current, name = COLOURS[m.seats[from] ?? 0][0]
+    const m = mp.current, name = nameOf(from)
     if (e.to !== selfId || !m.live) return
     if (e.reply) {
       if (m.swap !== from) return
@@ -884,11 +907,50 @@ export default function App() {
   const foes = (exclude = selfId) => lit(exclude).filter(p => tm(p.id) < 0 || tm(p.id) !== tm(selfId))
   const teammates = () => lit().filter(p => tm(p.id) >= 0 && tm(p.id) === tm(selfId))
 
+  function bump() {
+    const m = mp.current
+    setRun({ n: m.n, out: m.out, done: m.done, stars: m.stars.length })
+  }
+
+  // ——— echoes (the host runs them) ———
+
+  function wake(m: ReturnType<typeof freshMatch>) {
+    const bonus = trialBonus([...m.S.trials.toString(2)].filter(b => b === '1').length)
+    for (const id of m.echoes) {
+      const e = new Echo(id, m.round, m.S, WORDS[m.S.lang].answers, m.order, m.start, bonus, {
+        changed: e => {
+          net.current?.me(e.snapshot())
+        },
+        lock: (e, n) => {
+          const to = target(players().filter(p => !p.id.startsWith('echo') && !p.out && !p.done))?.id // at the leading player
+          if (!to) return
+          net.current?.lock({ to, n, by: e.id })
+        },
+        over: () => checkEnd(),
+      })
+      bots.current[id] = e
+      e.run()
+    }
+  }
+
+  function sleep() {
+    for (const e of Object.values(bots.current)) e.stop()
+    bots.current = {}
+  }
+
+  // Echoes keep playing only while the host who runs them is still here.
+  function echoesAlive() {
+    return mp.current.echoHost === selfId || peersRef.current.includes(mp.current.echoHost)
+  }
+  function present(id: string) {
+    return id === selfId || peersRef.current.includes(id) || mp.current.echoes.includes(id)
+  }
+
   // Everyone else still playing this match, with their scores.
   function lit(exclude = selfId) {
     const m = mp.current, snaps = snapsRef.current
-    return Object.keys(m.seats)
-      .filter(id => id !== exclude && peersRef.current.includes(id) && snaps[id]?.round === m.round && !snaps[id].out && !snaps[id].done)
+    return [...Object.keys(m.seats), ...(echoesAlive() ? m.echoes : [])]
+      .filter(id => id !== exclude && present(id) && snaps[id]?.round === m.round && !snaps[id].out && !snaps[id].done)
       .map(id => ({ id, score: snaps[id].score }))
   }
 
@@ -916,7 +978,7 @@ export default function App() {
     const m = mp.current, key = `${id}:${h}`, el = panelEls.current[id]
     if (!has(m.S, 'jinx') || m.jinxed.includes(key) || m.out || m.done || m.ended || (tm(id) >= 0 && tm(id) === tm(selfId))) return // teammates can't jinx
     m.jinxed = [...m.jinxed, key]
-    const name = COLOURS[m.seats[id] ?? 0][0]
+    const name = nameOf(id)
     flash(`jinx! · ${name}`)
     say(`Jinx with ${name}: you both lose a row`)
     snd.current.jinx(side(id))
@@ -938,6 +1000,7 @@ export default function App() {
     const to = target(foes())?.id
     if (!to) return
     net.current?.lock({ to, n })
+    bots.current[to]?.hit(n)
     const el = panelEls.current[to]
     if (el) fx.current.stream(center(board.current), center(el), hueOf(selfId), n)
     snd.current.launch(side(to))
@@ -951,20 +1014,28 @@ export default function App() {
     setPending(m.pending)
     const el = panelEls.current[from]
     if (el) fx.current.melt(center(el), center(board.current))
-    flash(`${COLOURS[m.seats[from] ?? 0][0]} melted your frost`)
+    flash(`${nameOf(from)} melted your frost`)
   }
 
   // Locks in flight are drawn on every screen; only the target's board takes them.
   function gotLock(l: Lock, from: string) {
     const m = mp.current, a = panelEls.current[from]
+    if (l.to.startsWith('echo')) {
+      bots.current[l.to]?.hit(l.n) // only the host has the echo itself
+      const b = panelEls.current[l.to]
+      if (a && b) fx.current.stream(center(a), center(b), hueOf(from), l.n)
+      else if (from === selfId && b) fx.current.stream(center(board.current), center(b), hueOf(selfId), l.n)
+      return
+    }
     if (l.to === selfId) {
       if (a) fx.current.stream(center(a), center(board.current), hueOf(from), l.n)
-      const name = COLOURS[m.seats[from] ?? 0][0]
+      const name = nameOf(from)
       if (m.live && m.mirror) {
         // Mirror shield: straight back where it came from
         m.mirror = false
         setGuard(guards())
         net.current?.lock({ to: from, n: l.n })
+        bots.current[from]?.hit(l.n)
         setTimeout(() => {
           fx.current.shield(false)
           if (a) fx.current.bounce(center(board.current), center(a), hueOf(selfId))
@@ -980,10 +1051,11 @@ export default function App() {
         m.decoy--
         setGuard(guards())
         net.current?.lock({ to, n: l.n })
+        bots.current[to]?.hit(l.n)
         setTimeout(() => {
           if (b) fx.current.stream(center(board.current), center(b), hueOf(from), l.n)
           snd.current.decoy()
-          flash(`decoy! it went to ${COLOURS[m.seats[to] ?? 0][0]}`)
+          flash(`decoy! it went to ${nameOf(to)}`)
         }, 900)
         return
       }
@@ -1026,11 +1098,11 @@ export default function App() {
     if (me.live && m.round === me.round) for (const h of m.said) if (me.said.includes(h)) jinx(id, h, rows.length)
     if (!prev || prev.round !== m.round || prev.n !== m.n) return
     const r = m.rows.length - 1, was = prev.rows[r] ?? ''
-    for (let c = was.length; c < (m.rows[r]?.length ?? 0); c++) if (m.rows[r][c] === 'c') snd.current.far(c, pan)
+    for (let c = was.length; c < (m.rows[r]?.length ?? 0); c++) if (m.rows[r][c] === 'c') snd.current.far(c, pan, id.startsWith('echo'))
     if (!prev.out && m.out) {
       snd.current.fall(pan)
       if (el) fx.current.ember(center(el), hueOf(id))
-      say(`${COLOURS[roomRef.current?.seats[id] ?? 0][0]}'s light rests`)
+      say(`${nameOf(id)}'s light rests`)
     }
   }
 
@@ -1157,7 +1229,7 @@ export default function App() {
       </div>
       {code && room && selfId in room.seats && (
         <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>
-          you{live && <Which n={mp.current.n} out={mp.current.out} done={mp.current.done} />}
+          you{live && <Which n={run.n} out={run.out} done={run.done} />}
         </figcaption>
       )}
       {live && room?.settings.skills && (
@@ -1175,7 +1247,7 @@ export default function App() {
       )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} side={teams ? teamOf(id) : -1} row={teams ? (teamOf(id) === teamOf(selfId) ? 1 : 2) : 0} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} side={teams ? teamOf(id) : -1} row={teams ? (teamOf(id) === teamOf(selfId) ? 1 : 2) : 0} seat={seatIn(room, id)} snap={snaps[id]?.round === room.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 && !id.startsWith('echo') ? () => cast(aim, id) : undefined} echo={id.startsWith('echo') ? nameOf(id) : undefined} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">
@@ -1193,7 +1265,7 @@ export default function App() {
             ))}
           </>
         ) : live && room?.settings.mode === 'stars' ? (
-          <p><small>Stars</small><b>{mp.current.stars.length}<i>/{room.settings.stars}</i></b></p>
+          <p><small>Stars</small><b>{run.stars}<i>/{room.settings.stars}</i></b></p>
         ) : (
           <p><small>Total</small><b><Tally value={total} /></b></p>
         )}
@@ -1213,15 +1285,15 @@ export default function App() {
       {ended && (
         <ol className="rank">
           {ended.rank.map(p => (
-            <li key={p.id} className={teams ? `side-${teamOf(p.id)}` : ''} style={{ '--h': COLOURS[room?.seats[p.id] ?? 0][1] } as CSSProperties}>
-              {p.id === selfId ? 'you' : COLOURS[room?.seats[p.id] ?? 0][0]} <b>{p.score.toLocaleString('en-US')}</b>
+            <li key={p.id} className={teams ? `side-${teamOf(p.id)}` : ''} style={{ '--h': hueOf(p.id) } as CSSProperties}>
+              {p.id === selfId ? 'you' : nameOf(p.id)} <b>{p.score.toLocaleString('en-US')}</b>
             </li>
           ))}
         </ol>
       )}
       {rig && (
         <div className="rig" style={{ '--h': hueOf(rig.to) } as CSSProperties}>
-          <small>pick {COLOURS[room?.seats[rig.to] ?? 0][0]}'s next word</small>
+          <small>pick {nameOf(rig.to)}'s next word</small>
           <div>
             {rig.words.map((w, i) => (
               <button key={w} onMouseDown={e => e.preventDefault()} onClick={() => rigWith(w)}>
@@ -1245,6 +1317,9 @@ export default function App() {
               ))}
               <button onMouseDown={e => e.preventDefault()} onClick={switchSide}>switch to {TEAM_NAMES[1 - teamOf(selfId)]}</button>
             </span>
+          )}
+          {lobby && room && room.settings.versus === 'echoes' && selfId in room.seats && !line && (
+            <span className="sides">you'll face {seated} {seated === 1 ? 'echo' : 'echoes'}</span>
           )}
           {lobby && room && selfId in room.seats && !line && (
             <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
