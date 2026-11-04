@@ -173,7 +173,7 @@ export default function App() {
     say(`${word}: ${marks.map((m, i) => `${word[i]} ${NAMES[m]}`).join(', ')}`)
     if (!won) {
       snd.current.combo(snd.current.grid(EIGHTH), Math.max(...chain) + 1, s.streak)
-      snd.current.setTension(tensionOf(s.greens.size, r + 1))
+      snd.current.setTension(tensionOf(s.greens.size, ROWS - r - 1))
       charge(energyOf(s))
     }
     if (won) finish('won', r)
