@@ -69,6 +69,7 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
         <Choice label="Mode" value={MODE_NAMES[s.mode]} onClick={ch({ mode: after(MODES, s.mode) })} about={s.mode} />
         <Choice label="Rows" value={s.rows} onClick={ch({ rows: s.rows === 8 ? 4 : s.rows + 1 })} />
         <Choice label="Locks" value={LOCKS[s.locks]} onClick={ch({ locks: (s.locks + 1) % 3 })} />
+        <Choice label="Words" value={s.lang === 'en' ? 'English' : 'Indonesian'} onClick={ch({ lang: s.lang === 'en' ? 'id' : 'en' })} />
       </>
     )
   return (

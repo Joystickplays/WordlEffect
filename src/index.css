@@ -469,6 +469,14 @@ canvas.fx {
 .together {
   left: 42px;
 }
+.lang {
+  left: 68px;
+  width: auto;
+  font: 600 10px/16px inherit;
+  font-family: inherit;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 .together svg,
 .full svg {
   fill: none;

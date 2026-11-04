@@ -2,15 +2,16 @@
 // directly between browsers. Every message is checked before use: a peer is someone else's code.
 // shortcut: STUN only, so strict NATs (some mobile and office networks) can't connect; add TURN via turnConfig.
 import { joinRoom, selfId } from 'trystero'
+import type { Lang } from './words.ts'
 
 export { selfId }
-export const V = 1 // bump when messages change shape, so mismatched versions say so instead of misbehaving
+export const V = 2 // bump when messages change shape, so mismatched versions say so instead of misbehaving
 
 export type Mode = 'light' | 'tide' | 'stars'
 export const TRIALS = ['strict', 'undertow', 'fading', 'frost'] as const
 export type Trial = (typeof TRIALS)[number]
-export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number }
-export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3 }
+export type Settings = { mode: Mode; rows: number; locks: number; trials: number; seats: number; tide: number; stars: number; lang: Lang }
+export const DEFAULTS: Settings = { mode: 'light', rows: 6, locks: 1, trials: 0, seats: 8, tide: 5, stars: 3, lang: 'en' }
 export const has = (s: Settings, t: Trial) => !!(s.trials & (1 << TRIALS.indexOf(t)))
 
 // Players are their colours, by seat.
@@ -29,7 +30,7 @@ const int = (x: unknown, lo: number, hi: number) => num(x, lo, hi) && Number.isI
 
 const okSettings = (s: unknown) =>
   obj(s) && ['light', 'tide', 'stars'].includes(s.mode as string) && int(s.rows, 4, 8) && int(s.locks, 0, 2) && int(s.trials, 0, 15) &&
-  int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number)
+  int(s.seats, 2, 8) && [3, 5, 10].includes(s.tide as number) && [3, 5].includes(s.stars as number) && (s.lang === 'en' || s.lang === 'id')
 const okRoom = (r: unknown): r is Room =>
   obj(r) && okSettings(r.settings) && (r.phase === 'lobby' || r.phase === 'play') && int(r.seed, 0, 2 ** 32) && int(r.round, 0, 1e6) &&
   obj(r.seats) && Object.keys(r.seats).length <= 8 && Object.values(r.seats).every(v => int(v, 0, 7))

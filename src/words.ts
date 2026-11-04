@@ -1,7 +1,14 @@
-import raw from './valid.txt?raw'
+import enValid from './valid.txt?raw'
+// Indonesian: guesses from the hunspell-id dictionary (LGPL-3.0, see id/NOTICE.md); answers are the ones most used
+// in everyday speech, ranked by hermitdave/FrequencyWords (CC-BY-SA 4.0).
+import idValid from './id/valid.txt?raw'
+import idAnswers from './id/answers.txt?raw'
+
+export type Lang = 'en' | 'id'
+export const LANGS: Lang[] = ['en', 'id']
 
 // Answers are common words; guesses may be anything in the full dictionary.
-export const ANSWERS = `
+const EN = `
 about above actor adapt adore adult after again agent agree ahead alarm album alert alien alike alive allow
 alone along alpha amber ample angel anger angle apart apple apply arena argue arise armor aroma arrow aside
 aspen atlas audio avoid awake award aware azure bacon badge baker basic basin batch beach beard beast begin
@@ -51,4 +58,11 @@ wrong yacht yearn yeast yield young youth zebra zesty
   .trim()
   .split(/\s+/)
 
-export const VALID = new Set([...raw.split('\n'), ...ANSWERS])
+const lines = (s: string) => s.split('\n').filter(Boolean)
+const ID = lines(idAnswers)
+
+export const WORDS: Record<Lang, { answers: string[]; valid: Set<string> }> = {
+  en: { answers: EN, valid: new Set([...lines(enValid), ...EN]) },
+  id: { answers: ID, valid: new Set([...lines(idValid), ...ID]) },
+}
+export const anyWord = (w: string) => WORDS.en.valid.has(w) || WORDS.id.valid.has(w) // room names can be either

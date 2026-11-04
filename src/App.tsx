@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
-import { ANSWERS, VALID } from './words.ts'
+import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
@@ -12,7 +12,8 @@ const KEYS = ['qwertyuiop', 'asdfghjkl', '⏎zxcvbnm⌫']
 const NAMES = { correct: 'right', present: 'elsewhere', absent: 'not in word' }
 const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px)` }))
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
-const pick = () => ANSWERS[Math.floor(Math.random() * ANSWERS.length)]
+const pick = (lang: Lang) => WORDS[lang].answers[Math.floor(Math.random() * WORDS[lang].answers.length)]
+const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
 const freshMatch = () => ({
@@ -48,7 +49,8 @@ function Meter({ value }: { value: number }) {
 }
 
 export default function App() {
-  const [answer, setAnswer] = useState(pick)
+  const [solo, setSolo] = useState(saved) // the language you play alone in
+  const [answer, setAnswer] = useState(() => pick(saved()))
   const [rows, setRows] = useState<{ word: string; marks: Mark[] }[]>([])
   const [cur, setCur] = useState('')
   const [shown, setShown] = useState(COLS) // tiles revealed so far in the newest row
@@ -85,6 +87,7 @@ export default function App() {
   const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([])
   const mp = useRef(freshMatch()), snapsRef = useRef<Record<string, Me>>({}), panelEls = useRef<Record<string, HTMLElement | null>>({})
   const limit = room ? room.settings.rows : ROWS
+  const lang = room ? room.settings.lang : solo
   const lobby = !!code && !live
   const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
   const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => room.seats[a] - room.seats[b]) : []
@@ -193,7 +196,7 @@ export default function App() {
   }
 
   function submit() {
-    if (cur.length < COLS || !VALID.has(cur)) return refuse(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
+    if (cur.length < COLS || !WORDS[mp.current.live ? mp.current.S.lang : lang].valid.has(cur)) return refuse(cur.length < COLS ? 'Not enough letters' : 'Not in word list')
     if (trial('strict') && strictBreak(cur, rows)) {
       refuse('Keep the letters you found')
       return flash('keep the light you found')
@@ -296,7 +299,7 @@ export default function App() {
   }
 
   // A fresh board. In a match the streak, score and clock carry on to the next word.
-  function restart(word = pick(), keep = false) {
+  function restart(word = pick(lang), keep = false) {
     fx.current.reset()
     snd.current.reset()
     stats.current = { ...fresh(), streak: keep ? stats.current.streak : 0 }
@@ -338,7 +341,7 @@ export default function App() {
     peersRef.current = []
     setPeers([])
     setHost(true)
-    applyRoom({ settings: roomRef.current?.settings ?? DEFAULTS, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 } })
+    applyRoom({ settings: roomRef.current?.settings ?? { ...DEFAULTS, lang: solo }, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 } })
     setRows([{ word, marks: Array(COLS).fill('correct') }]) // the room's word, lit, on the first row
     setLine('')
     if (joined) setTimeout(() => !peersRef.current.length && location.hash === `#${word}` && setLine('still looking for them'), 20000)
@@ -404,7 +407,7 @@ export default function App() {
   function lobbyEnter() {
     const r = roomRef.current
     if (cur.length === COLS) {
-      if (!VALID.has(cur)) return refuse('Not in word list')
+      if (!anyWord(cur)) return refuse('Not in word list')
       if (cur !== code) goTo(cur, true)
       else setCur('')
     } else if (!cur && host && r && seated >= 2) publish({ ...seat(r, peersRef.current), phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32) })
@@ -412,7 +415,7 @@ export default function App() {
 
   // The host said go: a four-beat count-in on the Cmaj7, then everyone's first word.
   function begin(r: Room) {
-    const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, ANSWERS.length) })
+    const m = (mp.current = { ...freshMatch(), live: true, round: r.round, S: r.settings, seats: r.seats, order: order(r.seed, WORDS[r.settings.lang].answers.length) })
     restart()
     setLive(true)
     setEnded(null)
@@ -438,7 +441,7 @@ export default function App() {
     m.locked = Math.min(m.carry, m.S.rows - 1 - dusk)
     m.sealed = dusk + m.locked
     setSealed(m.sealed)
-    restart(ANSWERS[m.order[m.n % m.order.length]], true)
+    restart(WORDS[m.S.lang].answers[m.order[m.n % m.order.length]], true)
   }
 
   function advance(won: boolean) {
@@ -598,7 +601,7 @@ export default function App() {
   // A #word link goes straight into that room.
   const follow = useEffectEvent(() => {
     const w = location.hash.slice(1).toLowerCase()
-    if (w && w !== code && VALID.has(w)) goTo(w, true)
+    if (w && w !== code && anyWord(w)) goTo(w, true)
     else if (!w && code) leave()
   })
   useEffect(() => {
@@ -776,13 +779,28 @@ export default function App() {
         className="corner together"
         aria-label={code ? 'Play alone' : 'Play together'}
         onMouseDown={e => e.preventDefault()}
-        onClick={() => (code ? leave() : goTo(pick()))}
+        onClick={() => (code ? leave() : goTo(pick(lang)))}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <rect x="1.5" y="5.5" width="9" height="9" rx="1.5" />
           <path d="M5.5 5.5v-2a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
         </svg>
       </button>
+      {!code && (
+        <button
+          className="corner lang"
+          aria-label={solo === 'en' ? 'Play in Indonesian' : 'Play in English'}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => {
+            const next = solo === 'en' ? 'id' : 'en'
+            localStorage.setItem('lang', next)
+            setSolo(next)
+            restart(pick(next))
+          }}
+        >
+          {solo}
+        </button>
+      )}
       <a className="corner repo" href="https://github.com/Joystickplays/WordlEffect" target="_blank" rel="noopener noreferrer" aria-label="Source code on GitHub">
         <svg viewBox="0 0 16 16" aria-hidden="true">
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
