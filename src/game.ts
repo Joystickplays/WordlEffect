@@ -140,3 +140,6 @@ export function roll<K extends string>(weights: Record<K, number>, rand = Math.r
   for (const k of keys) if ((x -= weights[k]) < 0) return k
   return keys[keys.length - 1]
 }
+
+// Teams: a newcomer joins the smaller side (dawn on a tie).
+export const balance = (sides: Record<string, number>) => (Object.values(sides).filter(s => s === 1).length < Object.values(sides).filter(s => s === 0).length ? 1 : 0)

@@ -1145,3 +1145,34 @@ canvas.fx {
     animation-duration: 0.01s !important;
   }
 }
+
+/* Teams: a faint tint behind each team's boards, warm dawn and cool dusk */
+.boards .panel.side-0,
+.boards .panel.side-1 {
+  border-radius: calc(var(--tile) * 0.3);
+  padding: calc(var(--tile) * 0.15);
+  margin: calc(var(--tile) * -0.15);
+}
+.boards .panel.side-0 {
+  background: radial-gradient(ellipse at 50% 45%, rgb(255 190 110 / 0.07), transparent 72%);
+}
+.boards .panel.side-1 {
+  background: radial-gradient(ellipse at 50% 45%, rgb(120 170 255 / 0.08), transparent 72%);
+}
+.sides {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  margin-bottom: 6px;
+}
+.sides .side-0 {
+  color: rgb(255 205 140 / 0.75);
+}
+.sides .side-1 {
+  color: rgb(150 190 255 / 0.8);
+}
+.line .sides button {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}

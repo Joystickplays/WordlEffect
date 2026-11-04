@@ -4,6 +4,7 @@ import { COLOURS, type Me, type Mode, type Settings } from './net.ts'
 import { SKILLS, type Skill } from './skills.ts'
 const MODES: Mode[] = ['light', 'tide', 'stars']
 const MODE_NAMES = { light: 'last light', tide: 'tide', stars: 'stars' }
+const VERSUS = { all: 'everyone', teams: 'teams', echoes: 'echoes' }
 const LOCKS = ['off', 'gentle', 'fierce']
 const TRIAL_NAMES = ['strict', 'undertow', 'fading', 'heavy frost', 'squatter', 'rigged', 'jinx']
 const MARK = { c: 'correct', p: 'present', a: 'absent' } as const
@@ -13,6 +14,7 @@ const still = (e: { preventDefault(): void }) => e.preventDefault() // keep focu
 
 // What each mode and trial means, in plain words.
 const ABOUT: Record<string, string> = {
+  versus: 'Everyone: each player for themselves. Teams: two teams, dawn and dusk, add up their points; locks only fly at the other team, and the locks you earn melt your teammates\' first. Echoes: everyone is one team against the same number of bots. In every case, the mode decides how a team wins.',
   light: "Get a word wrong and you're out. The last player still going wins. Every 3 minutes, every board loses a row, so the match can't go on forever.",
   tide: 'A race against the clock. Solve as many words as you can before time runs out. The highest score wins.',
   stars: 'Every word you solve earns you a star. The first player to collect 3 stars (or 5) wins.',
@@ -76,6 +78,7 @@ export function Setup({ side, s, set }: { side: 'left' | 'right'; s: Settings; s
         <Choice label="Rows" value={s.rows} onClick={ch({ rows: s.rows === 8 ? 4 : s.rows + 1 })} />
         <Choice label="Locks" value={LOCKS[s.locks]} onClick={ch({ locks: (s.locks + 1) % 3 })} />
         <Choice label="Words" value={s.lang === 'en' ? 'English' : 'Indonesian'} onClick={ch({ lang: s.lang === 'en' ? 'id' : 'en' })} />
+        <Choice label="Versus" value={VERSUS[s.versus]} onClick={ch({ versus: after(['all', 'teams', 'echoes'] as const, s.versus) })} about="versus" />
       </>
     )
   return (
@@ -119,10 +122,10 @@ export function Which({ n, out, done }: { n: number; out?: boolean; done?: boole
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, live, pick, el }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void }) {
+export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0 }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void; side?: number; row?: number }) {
   const [name, h] = COLOURS[seat], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
-    <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0 } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
+    <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''} ${side >= 0 ? `side-${side}` : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0, gridRow: row || undefined } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
       <div className="board peer" aria-hidden="true">
         {Array.from({ length: rows }, (_, r) => (
           <div key={r} className={`row ${r >= rows - sealed ? 'sealed' : ''}`}>

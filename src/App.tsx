@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
+import { score, chains, balance, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
 import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
@@ -19,6 +19,12 @@ const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answer
 const SHARDS = Array.from({ length: 64 }, (_, i) => ({
   '--a': `${(i / 64) * 360 + Math.random() * 12}deg`, '--d': `${120 + Math.random() * 260}px`, '--s': `${2 + Math.random() * 3}px`, '--t': `${Math.random() * 0.25}s`,
 }))
+// Which team a player is on: -1 when it's everyone for themselves.
+function teamIn(r: Room | null, id: string) {
+  if (!r || r.settings.versus === 'all') return -1
+  if (r.settings.versus === 'echoes') return id.startsWith('echo') ? 1 : 0
+  return r.sides[id] ?? 0
+}
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
@@ -102,16 +108,24 @@ export default function App() {
   const canvas = useRef<HTMLCanvasElement>(null!), board = useRef<HTMLDivElement>(null!)
   const rowEls = useRef<HTMLDivElement[]>([]), tileEls = useRef<HTMLDivElement[]>([]), ghostEls = useRef<HTMLDivElement[]>([])
   const fx = useRef<FX>(null!), snd = useRef<Sound>(null!), stats = useRef(fresh())
-  const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([])
+  const net = useRef<Net | null>(null), roomRef = useRef<Room | null>(null), peersRef = useRef<string[]>([]), hostRef = useRef('')
   const mp = useRef(freshMatch()), snapsRef = useRef<Record<string, Me>>({}), panelEls = useRef<Record<string, HTMLElement | null>>({})
   const limit = room ? room.settings.rows : ROWS
   const lang = room ? room.settings.lang : solo
   const lobby = !!code && !live
   const seated = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)).length : 0
-  const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => room.seats[a] - room.seats[b]) : []
-  const boards = 1 + others.length, cols = boards <= 4 ? boards : Math.ceil(boards / 2)
+  const teams = !!room && room.settings.versus !== 'all'
+  const teamOf = (id: string) => teamIn(room, id)
+  // your team first, then the other; within a team, by seat
+  const others = room ? Object.keys(room.seats).filter(id => id !== selfId && peers.includes(id)).sort((a, b) => (teams ? Math.abs(teamOf(a) - teamOf(selfId)) - Math.abs(teamOf(b) - teamOf(selfId)) : 0) || room.seats[a] - room.seats[b]) : []
+  const boards = 1 + others.length, mates = teams ? 1 + others.filter(id => teamOf(id) === teamOf(selfId)).length : 0
+  const cols = teams ? Math.max(mates, boards - mates, 1) : boards <= 4 ? boards : Math.ceil(boards / 2)
   const side = (id: string) => (cols > 1 ? -0.6 + (1.2 * ((others.indexOf(id) + 1) % cols)) / (cols - 1) : 0) // pan by which column their board is in
+  const here = room ? Object.keys(room.seats).filter(id => id === selfId || peers.includes(id)) : []
+  // who can start: two or more, one on each side for teams, and one is enough against the echoes
+  const ready = !room ? false : room.settings.versus === 'echoes' ? seated >= 1 : room.settings.versus === 'teams' ? [0, 1].every(t => here.some(id => teamOf(id) === t)) : seated >= 2
   const trial = (t: Parameters<typeof has>[1]) => live && !!room && has(room.settings, t)
+  const TEAM_NAMES = room?.settings.versus === 'echoes' ? ['team', 'echoes'] : ['dawn', 'dusk']
   const hueOf = (id: string) => COLOURS[roomRef.current?.seats[id] ?? 0][1]
 
   useEffect(() => {
@@ -134,7 +148,7 @@ export default function App() {
     const cs = getComputedStyle(tileEls.current[0])
     fx.current.letters(parseFloat(cs.fontSize), cs.fontFamily, cs.fontWeight)
   })
-  useEffect(() => place(), [limit, code, others.length])
+  useEffect(() => place(), [limit, code, others.length, live, cols])
 
   const center = (el: Element) => {
     const r = el.getBoundingClientRect()
@@ -383,7 +397,7 @@ export default function App() {
     peersRef.current = []
     setPeers([])
     setHost(true)
-    applyRoom({ settings: roomRef.current?.settings ?? { ...DEFAULTS, lang: solo }, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 } })
+    applyRoom({ settings: roomRef.current?.settings ?? { ...DEFAULTS, lang: solo }, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 }, sides: { [selfId]: 0 }, echoes: [] })
     setRows([{ word, marks: Array(COLS).fill('correct') }]) // the room's word, lit, on the first row
     setLine('')
     if (joined) setTimeout(() => !peersRef.current.length && location.hash === `#${word}` && setLine('still looking for them'), 20000)
@@ -429,7 +443,11 @@ export default function App() {
     for (const id of [selfId, ...ids]) if (id in r.seats) seats[id] = r.seats[id]
     for (const id of [selfId, ...ids])
       if (!(id in seats) && Object.keys(seats).length < r.settings.seats) seats[id] = COLOURS.findIndex((_, i) => !Object.values(seats).includes(i))
-    return { ...r, seats }
+    // sides: everyone keeps theirs, newcomers even the teams out
+    const sides: Record<string, number> = {}
+    for (const id in seats) if (id in r.sides) sides[id] = r.sides[id]
+    for (const id in seats) if (!(id in sides)) sides[id] = balance(sides)
+    return { ...r, seats, sides }
   }
 
   function peersChanged(ids: string[], h: string) {
@@ -439,11 +457,30 @@ export default function App() {
     peersRef.current = ids
     setPeers(ids)
     setHost(h === selfId)
+    hostRef.current = h
     // a match nobody is still playing in is over: open the lobby again
     const playing = r && Object.keys(r.seats).some(id => (id === selfId ? mp.current.live : ids.includes(id)))
     if (h === selfId && r) publish(r.phase === 'lobby' || !playing ? seat({ ...r, phase: 'lobby' }, ids) : r)
     net.current?.me(snapshot()) // newcomers need to see us too
     checkEnd()
+  }
+
+  // Switching sides: ask the host, who keeps the teams within one player of each other.
+  function switchSide() {
+    const r = roomRef.current
+    if (!r) return
+    const want = 1 - (r.sides[selfId] ?? 0), sides = { ...r.sides, [selfId]: want }
+    if (Math.abs(Object.keys(sides).length - 2 * Object.values(sides).filter(x => x === 1).length) > 1) return flash('the teams would be uneven')
+    if (host) gotSide({ k: 'side', to: selfId, side: want }, selfId)
+    else net.current?.ev({ k: 'side', to: hostRef.current, side: want }, hostRef.current)
+  }
+
+  function gotSide(e: Extract<Ev, { k: 'side' }>, from: string) {
+    const r = roomRef.current
+    if (!host || !r || r.phase !== 'lobby' || !(from in r.seats)) return
+    const sides = { ...r.sides, [from]: e.side }, dusk = Object.values(sides).filter(s => s === 1).length
+    if (Math.abs(Object.keys(sides).length - 2 * dusk) > 1) return flash('the teams would be uneven')
+    publish({ ...r, sides })
   }
 
   function lobbyEnter() {
@@ -452,7 +489,7 @@ export default function App() {
       if (!anyWord(cur)) return refuse('Not in word list')
       if (cur !== code) goTo(cur, true)
       else setCur('')
-    } else if (!cur && host && r && seated >= 2) publish({ ...seat(r, peersRef.current), phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32) })
+    } else if (!cur && host && r && ready) publish({ ...seat(r, peersRef.current), phase: 'play', round: r.round + 1, seed: Math.floor(Math.random() * 2 ** 32) })
   }
 
   // The host said go: a four-beat count-in on the Cmaj7, then everyone's first word.
@@ -939,7 +976,7 @@ export default function App() {
     return () => clearTimeout(id)
   }, [rig])
   const onLock = useEffectEvent(gotLock)
-  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : gotSwap(e, from)))
+  const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : e.k === 'side' ? gotSide(e, from) : gotSwap(e, from)))
   useEffect(() => {
     if (!code) return
     const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
@@ -1019,7 +1056,7 @@ export default function App() {
         </>}
       </aside>
       <div className="boards">
-      <figure className="panel">
+      <figure className={`panel ${teams ? `side-${teamOf(selfId)}` : ''}`} style={teams ? { gridRow: 1 } : undefined}>
       <div className="board" ref={board} role="grid" aria-label="Guesses">
         {live && pending > 0 && (
           <div className="frostq" aria-label={`${pending} locks waiting`}>
@@ -1067,7 +1104,7 @@ export default function App() {
       )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} side={teams ? teamOf(id) : -1} row={teams ? (teamOf(id) === teamOf(selfId) ? 1 : 2) : 0} seat={room.seats[id]} snap={snaps[id]?.round === mp.current.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 ? () => cast(aim, id) : undefined} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">
@@ -1118,6 +1155,16 @@ export default function App() {
       {code && (
         <p className="line">
           {ended ? ended.line : line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
+          {lobby && room && room.settings.versus === 'teams' && selfId in room.seats && !line && (
+            <span className="sides">
+              {[0, 1].map(t => (
+                <span key={t} className={`side-${t}`}>
+                  {TEAM_NAMES[t]}: {Object.keys(room.seats).filter(id => (id === selfId || peers.includes(id)) && teamOf(id) === t).map(id => (id === selfId ? 'you' : COLOURS[room.seats[id]][0])).join(', ') || '–'}
+                </span>
+              ))}
+              <button onMouseDown={e => e.preventDefault()} onClick={switchSide}>switch to {TEAM_NAMES[1 - teamOf(selfId)]}</button>
+            </span>
+          )}
           {lobby && room && selfId in room.seats && !line && (
             <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
           )}
@@ -1133,7 +1180,7 @@ export default function App() {
                 <button
                   key={k}
                   aria-label={k === 'enter' ? 'Enter' : k === 'back' ? 'Delete' : k}
-                  className={`key ${(!trial('fading') && keys[k]) || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && seated >= 2 && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
+                  className={`key ${(!trial('fading') && keys[k]) || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && ready && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => onKey(k)}
                 >

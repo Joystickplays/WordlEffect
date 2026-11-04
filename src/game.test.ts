@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose, hardest, roll } from './game.ts'
+import { score, chains, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, hash, squatLetter, compose, hardest, roll, balance } from './game.ts'
 
 test('score handles exact, misplaced and duplicate letters', () => {
   assert.deepEqual(score('crane', 'crane'), Array(5).fill('correct'))
@@ -128,4 +128,11 @@ test('the skill reel follows its weights', () => {
   assert.equal(roll(w, () => 0.24), 'a')
   assert.equal(roll(w, () => 0.26), 'b')
   assert.equal(roll(w, () => 0.999), 'b')
+})
+
+test('newcomers join the smaller team', () => {
+  assert.equal(balance({}), 0)
+  assert.equal(balance({ a: 0 }), 1)
+  assert.equal(balance({ a: 0, b: 1 }), 0)
+  assert.equal(balance({ a: 0, b: 0, c: 1 }), 1)
 })
