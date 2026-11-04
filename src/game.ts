@@ -161,8 +161,10 @@ const top = (list: string[], score: (w: string) => number, rand: () => number) =
   let most = -1, pick: string[] = []
   for (const w of list) {
     const s = score(w)
-    if (s > most) (most = s), (pick = [w])
-    else if (s === most) pick.push(w)
+    if (s > most) {
+      most = s
+      pick = [w]
+    } else if (s === most) pick.push(w)
   }
   return pick[Math.floor(rand() * pick.length)]
 }
