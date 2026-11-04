@@ -122,8 +122,9 @@ that's on multiplies your points by 1.25. Every mode and trial has a small (i) t
 
 ### Skills
 
-With skills on, every word you solve spins a reel and gives you a skill. You hold up to three; press **1**, **2** or
-**3** (or click the slot) to use one. Everyone can see everyone's skills.
+With skills on, every word you solve spins a full-screen reel. It lands on a skill, says in a line what it does, and
+waits for a click. You hold up to three under your board; click one (or press **1**, **2** or **3**) to use it. Everyone
+can see everyone's skills.
 
 | Skill | What it does |
 | --- | --- |
@@ -132,7 +133,7 @@ With skills on, every word you solve spins a reel and gives you a skill. You hol
 | Second wind | Your next wrong guess blows away and doesn't use up a row. |
 | Decoy | The next 2 locks aimed at you go to someone random instead. |
 | Mirror shield (rare) | The next lock or swap aimed at you bounces back to whoever sent it. |
-| Swap (legendary) | Trade boards mid-word with the leader, or click any board to pick someone else. |
+| Swap (legendary) | Trade boards mid-word. Use it, then click someone's board, or use it again to swap with the leader. |
 
 ### Good to know
 

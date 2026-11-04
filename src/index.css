@@ -845,13 +845,6 @@ canvas.fx {
   border-color: rgb(255 210 110 / 0.8);
   box-shadow: 0 0 18px rgb(255 190 80 / 0.4);
 }
-.bag button small {
-  position: absolute;
-  right: 3px;
-  bottom: 1px;
-  font-size: 8px;
-  opacity: 0.4;
-}
 .bag i {
   display: grid;
   width: 18px;
@@ -866,24 +859,6 @@ canvas.fx {
   stroke-width: 1.3;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.reel {
-  display: flex;
-  flex-direction: column;
-  animation: reel 0.18s linear infinite;
-}
-@keyframes reel {
-  to {
-    transform: translateY(-50%);
-  }
-}
-.bag button.spinning {
-  animation: settle 1.3s cubic-bezier(0.3, 1.6, 0.5, 1);
-}
-@keyframes settle {
-  0%, 85% {
-    transform: scale(1.12);
-  }
 }
 .bag b {
   display: grid;
@@ -951,5 +926,222 @@ canvas.fx {
   }
   .app.lobby .hud.right p:first-child {
     flex-basis: 100%;
+  }
+}
+
+/* The skill reveal: full screen, its own light, then click to continue */
+.gamble {
+  --r: 170 200 255;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 44%, rgb(var(--r) / 0.16), rgb(2 3 8 / 0.9) 46%, rgb(0 0 0 / 0.96));
+  animation: veil 0.4s ease-out;
+  cursor: default;
+}
+.gamble.rare {
+  --r: 185 125 255;
+}
+.gamble.legendary {
+  --r: 255 200 95;
+}
+.gamble.landed {
+  cursor: pointer;
+}
+@keyframes veil {
+  from {
+    opacity: 0;
+  }
+}
+.reel-window {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  border-radius: 26px;
+  border: 1px solid rgb(var(--r) / 0.35);
+  background: linear-gradient(160deg, rgb(var(--r) / 0.1), rgb(var(--r) / 0.02));
+  box-shadow: 0 0 40px rgb(var(--r) / 0.15), inset 0 0 30px rgb(var(--r) / 0.08);
+  transition: box-shadow 0.8s, border-color 0.8s;
+}
+.landed .reel-window {
+  border-color: rgb(var(--r) / 0.9);
+  box-shadow: 0 0 80px rgb(var(--r) / 0.55), 0 0 200px rgb(var(--r) / 0.25), inset 0 0 40px rgb(var(--r) / 0.25);
+  animation: thump 0.7s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+@keyframes thump {
+  from {
+    transform: scale(0.86);
+  }
+}
+.strip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.strip span {
+  display: grid;
+  place-items: center;
+  height: 132px;
+  transform: translateY(calc(var(--n) * -132px));
+  animation: roll 1.3s cubic-bezier(0.1, 0.75, 0.2, 1.03) both;
+}
+@keyframes roll {
+  from {
+    transform: translateY(0);
+    filter: blur(2px);
+  }
+  80% {
+    filter: blur(0);
+  }
+}
+.strip .icon {
+  width: 64px;
+  height: 64px;
+  stroke-width: 1;
+  stroke: #fff;
+  filter: drop-shadow(0 0 10px rgb(var(--r) / 0.9));
+}
+/* legendary gets slow rays behind the reel */
+.legendary .reel-window::before {
+  content: '';
+  position: absolute;
+  inset: -180px;
+  z-index: -1;
+  background: repeating-conic-gradient(rgb(var(--r) / 0.12) 0 6deg, transparent 6deg 24deg);
+  mask: radial-gradient(circle, #000 20%, transparent 65%);
+  opacity: 0;
+  transition: opacity 1s;
+  animation: rays 14s linear infinite;
+}
+.legendary.landed .reel-window::before {
+  opacity: 1;
+}
+@keyframes rays {
+  to {
+    rotate: 360deg;
+  }
+}
+.shards {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+}
+.shards i {
+  position: absolute;
+  left: calc(var(--s) / -2);
+  top: calc(var(--s) * -2);
+  width: var(--s);
+  height: calc(var(--s) * 4);
+  background: linear-gradient(#fff, rgb(var(--r)));
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  filter: drop-shadow(0 0 4px rgb(var(--r)));
+  opacity: 0;
+  transform: rotate(var(--a));
+}
+.landed .shards i {
+  animation: fling 1.5s cubic-bezier(0.1, 0.7, 0.3, 1) var(--t) both;
+}
+@keyframes fling {
+  12% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(calc(var(--d) * -1)) rotate(140deg);
+  }
+}
+.landed .shards::after {
+  content: '';
+  position: absolute;
+  left: -70px;
+  top: -70px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 2px solid rgb(var(--r) / 0.8);
+  animation: ring 1s ease-out both;
+}
+@keyframes ring {
+  to {
+    transform: scale(3.2);
+    opacity: 0;
+    border-width: 0.5px;
+  }
+}
+.gamble .rarity,
+.gamble h2,
+.gamble p,
+.gamble em {
+  margin: 0;
+  opacity: 0;
+  translate: 0 8px;
+  transition: opacity 0.6s, translate 0.6s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.gamble.landed .rarity,
+.gamble.landed h2,
+.gamble.landed p,
+.gamble.landed em {
+  opacity: 1;
+  translate: 0 0;
+}
+.gamble.landed h2 {
+  transition-delay: 0.08s;
+}
+.gamble.landed p {
+  transition-delay: 0.2s;
+}
+.gamble.landed em {
+  transition-delay: 0.9s;
+}
+.gamble .rarity {
+  margin-top: 18px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgb(var(--r) / 0.85);
+}
+.gamble h2 {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 0 24px rgb(var(--r) / 0.8);
+}
+.gamble p {
+  max-width: 330px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgb(225 232 250 / 0.85);
+}
+.gamble em {
+  margin-top: 10px;
+  font-style: normal;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: rgb(205 220 255 / 0.45);
+}
+.gamble.landed em {
+  animation: hint var(--bar) ease-in-out 1.4s infinite;
+}
+@keyframes hint {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gamble *,
+  .gamble *::before,
+  .gamble *::after {
+    animation-duration: 0.01s !important;
   }
 }

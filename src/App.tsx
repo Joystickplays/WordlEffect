@@ -15,6 +15,10 @@ const SHAKE = [0, -7, 6, -4, 3, -1, 0].map(x => ({ transform: `translateX(${x}px
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
 const pick = (lang: Lang) => WORDS[lang].answers[Math.floor(Math.random() * WORDS[lang].answers.length)]
 const NASTY = { en: hardest(WORDS.en.answers, 0.08), id: hardest(WORDS.id.answers, 0.08) }
+// The reveal's own light: shards flung out from the reel when it lands, each with its own angle, reach and delay.
+const SHARDS = Array.from({ length: 64 }, (_, i) => ({
+  '--a': `${(i / 64) * 360 + Math.random() * 12}deg`, '--d': `${120 + Math.random() * 260}px`, '--s': `${2 + Math.random() * 3}px`, '--t': `${Math.random() * 0.25}s`,
+}))
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
@@ -87,7 +91,7 @@ export default function App() {
   const [faded, setFaded] = useState(0) // Fading trial: rows that have drained back to clear glass
   const [squat, setSquat] = useState<Record<number, { ch: string; by: string }>>({}) // Squatter: letters stuck in the next row
   const [bag, setBag] = useState<Skill[]>([]) // Skills: up to three, slot by slot
-  const [spin, setSpin] = useState(-1) // the slot whose reel is still spinning
+  const [gamble, setGamble] = useState<{ s: Skill; strip: Skill[]; landed: boolean } | null>(null) // the full-screen reel
   const [hint, setHint] = useState<{ pos: number; ch: string } | null>(null) // Lantern: a letter lit in its box
   const [aim, setAim] = useState(-1) // Swap: the slot waiting for you to pick a board
   const [guard, setGuard] = useState('') // skills switched on: m(irror), d(ecoy), w(ind)
@@ -180,6 +184,7 @@ export default function App() {
   function onKey(k: string) {
     if (snd.current.wake()) fx.current.wake()
     if (!woke) setWoke(true)
+    if (gamble) return (k === 'enter' || k === ' ' || k === 'escape') && closeGamble()
     if (/^[123]$/.test(k)) return rig ? rigWith(rig.words[+k - 1]) : cast(+k - 1)
     if (phase === 'over') {
       if (k === 'enter' && !code) restart()
@@ -615,19 +620,30 @@ export default function App() {
     const m = mp.current, s = roll(Object.fromEntries(CODES.map(k => [k, SKILLS[k].weight])) as Record<Skill, number>)
     m.bag = [...m.bag, s]
     setBag(m.bag)
-    setSpin(m.bag.length - 1)
+    // the strip: three shuffled laps of every skill, landing on the one you won
+    const lap = () => [...CODES].sort(() => Math.random() - 0.5)
+    setGamble({ s, strip: [...lap(), ...lap(), ...lap(), s], landed: false })
     snd.current.spin(SKILLS[s].rarity)
     setTimeout(() => {
-      setSpin(-1)
-      const el = document.querySelectorAll('.bag.mine i')[m.bag.indexOf(s)]
-      if (el) fx.current.spin(center(el), SKILLS[s].rarity)
-      say(`New skill: ${SKILLS[s].name}`)
+      setGamble(g => g && { ...g, landed: true })
+      say(`New skill: ${SKILLS[s].name}. ${SKILLS[s].about} Press Enter to continue.`)
     }, 1300)
+  }
+
+  // Click (or Enter) once it's landed: the skill flies down into its slot.
+  function closeGamble() {
+    if (!gamble?.landed) return
+    const i = mp.current.bag.lastIndexOf(gamble.s)
+    setGamble(null)
+    requestAnimationFrame(() => {
+      const el = document.querySelectorAll('.bag.mine button')[i]
+      if (el) fx.current.spin(center(el), SKILLS[gamble.s].rarity)
+    })
   }
 
   function cast(i: number, at?: string) {
     const m = mp.current, s = m.bag[i]
-    if (!s || !m.live || m.out || m.done || m.ended || spin === i) return
+    if (!s || !m.live || m.out || m.done || m.ended || gamble) return
     if (s === 's') return swapWith(i, at)
     const ok = skill(s)
     if (!ok) return snd.current.invalid()
@@ -966,7 +982,7 @@ export default function App() {
       finish('lost', r - 1)
     }
   })
-  const undertow = trial('undertow') && phase === 'play' && !ended
+  const undertow = trial('undertow') && phase === 'play' && !ended && !gamble // the clock waits while you read
   useEffect(() => {
     if (!undertow) return
     const a = setTimeout(() => hurry(), 6 * BAR * 1000), b = setTimeout(() => expire(), 8 * BAR * 1000)
@@ -982,8 +998,8 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if ((e.target as Element).closest?.('button') && (e.key === 'Enter' || e.key === ' ')) return // the focused button handles it
       const k = e.key === 'Enter' ? 'enter' : e.key === 'Backspace' ? 'back' : e.key.toLowerCase()
-      if (e.key === 'Escape') return setAim(-1)
-      if (k === 'enter' || k === 'back' || /^[a-z1-3]$/.test(k)) {
+      if (e.key === 'Escape') setAim(-1)
+      if (k === 'enter' || k === 'back' || k === ' ' || k === 'escape' || /^[a-z1-3]$/.test(k)) {
         e.preventDefault()
         press(k)
       }
@@ -1039,11 +1055,10 @@ export default function App() {
       {live && room?.settings.skills && (
         <div className="bag mine" aria-label="Your skills">
           {[0, 1, 2].map(i => {
-            const s = bag[i]
+            const s = gamble && i === bag.length - 1 ? undefined : bag[i] // the new one arrives when the reveal closes
             return (
-              <button key={i} className={`${s ? SKILLS[s].rarity : 'empty'} ${spin === i ? 'spinning' : ''}`} disabled={!s || spin === i} onMouseDown={e => e.preventDefault()} onClick={() => cast(i)} aria-label={s ? `${i + 1}: ${SKILLS[s].name}. ${SKILLS[s].about}` : `Slot ${i + 1}: empty`} title={s ? `${SKILLS[s].name}: ${SKILLS[s].about}` : 'Solve a word to win a skill'}>
-                <i>{spin === i ? <span className="reel">{CODES.map(k => <Icon key={k} s={k} />)}</span> : s && <Icon s={s} />}</i>
-                <small>{i + 1}</small>
+              <button key={i} className={s ? SKILLS[s].rarity : 'empty'} disabled={!s} onMouseDown={e => e.preventDefault()} onClick={() => cast(i)} aria-label={s ? `${i + 1}: ${SKILLS[s].name}. ${SKILLS[s].about}` : `Slot ${i + 1}: empty`} title={s ? `${SKILLS[s].name}: ${SKILLS[s].about}` : 'Solve a word to win a skill'}>
+                <i>{s && <Icon s={s} />}</i>
               </button>
             )
           })}
@@ -1173,6 +1188,22 @@ export default function App() {
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
         </svg>
       </a>
+      {gamble && (
+        <div className={`gamble ${SKILLS[gamble.s].rarity} ${gamble.landed ? 'landed' : ''}`} role="dialog" aria-modal="true" aria-label="New skill" onClick={closeGamble}>
+          <div className="reel-window">
+            <div className="shards" aria-hidden="true">
+              {SHARDS.map((p, i) => <i key={i} style={p as CSSProperties} />)}
+            </div>
+            <div className="strip" style={{ '--n': gamble.strip.length - 1 } as CSSProperties}>
+              {gamble.strip.map((k, i) => <span key={i}><Icon s={k} /></span>)}
+            </div>
+          </div>
+          <small className="rarity">{SKILLS[gamble.s].rarity}</small>
+          <h2>{SKILLS[gamble.s].name}</h2>
+          <p>{SKILLS[gamble.s].about}</p>
+          <em>click to continue</em>
+        </div>
+      )}
       <div className="sr" aria-live="polite">{said}</div>
       <canvas className="fx" ref={canvas} aria-hidden="true" />
     </main>
