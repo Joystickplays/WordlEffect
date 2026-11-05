@@ -9,6 +9,14 @@ const mtof = (m: number) => 440 * 2 ** ((m - 69) / 12)
 const rand = (a: number, b: number) => a + Math.random() * (b - a)
 
 const ARP = [60, 64, 67, 71, 72] // C E G B C: the Cmaj7 arpeggio, one note per column, landing home on the octave
+// and under each, its own chord: Cmaj7, Am7, Em7, G7, then Cmaj7 home. Each column's note is the chord's top voice.
+const HARM = [
+  [36, 52, 55, 59], // Cmaj7 under C: C E G B
+  [45, 55, 60], // Am7 under E: A G C
+  [40, 59, 62], // Em7 under G: E B D
+  [43, 62, 65], // G7 under B: G D F
+  [48, 59, 64, 67], // Cmaj7 under the high C: C B E G
+]
 const PENTA = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81] // letters map onto this, so every word hums its own tune
 const ROOTS = [36, 33, 29, 31] // C A F G under a fixed E-G-B-D pad: Cmaj9, Am11, Fmaj13#11, G6/9
 // the pad's voicing for each chord, voice-led so each note moves a step or not at all
@@ -44,6 +52,7 @@ export class Sound {
   // The graph is built on the first keypress (browsers only allow audio after a gesture).
   ctx!: AudioContext
   master!: GainNode
+  muff!: BiquadFilterNode
   dry!: GainNode
   verb!: ConvolverNode
   echo!: GainNode
@@ -85,7 +94,11 @@ export class Sound {
     comp.release.value = 0.5
     this.master = c.createGain()
     this.master.gain.value = 0.75
-    this.master.connect(comp).connect(c.destination)
+    this.muff = c.createBiquadFilter()
+    this.muff.type = 'lowpass'
+    this.muff.frequency.value = 20000
+    this.muff.Q.value = 1.2 // a little resonance: the hollow ring of being underwater
+    this.master.connect(this.muff).connect(comp).connect(c.destination)
     this.dry = c.createGain()
     this.dry.connect(this.master)
 
@@ -262,6 +275,14 @@ export class Sound {
     to(this.padG.gain, 0.16 * Math.min(1, e * 1.6))
     to(this.padF.frequency, 220 + 2400 * e ** 1.6 + 900 * this.tension)
     to(this.shimG.gain, 0.035 * Math.max(0, (e - 0.3) / 0.7))
+  }
+
+  // Looking at another window: the world goes quiet and far away, as if heard from underwater.
+  muffle(on: boolean) {
+    if (!this.ctx) return
+    const t = this.ctx.currentTime
+    this.muff.frequency.setTargetAtTime(on ? 380 : 20000, t, on ? 0.4 : 0.25)
+    this.master.gain.setTargetAtTime(on ? 0.3 : 0.75, t, on ? 0.4 : 0.25)
   }
 
   now() {
@@ -478,6 +499,8 @@ export class Sound {
     if (mark === 'correct') {
       const boost = 1 + Math.max(0, chain) * 0.12
       this.piano(ARP[col], t, (fresh ? 0.6 : 0.4) * boost, { pan, decay: 6, rev: 0.55, echo: fresh ? 0.4 : 0.2 })
+      // the chord blooms under it, rolled softly upward
+      HARM[col].forEach((m, i) => this.piano(m, t + 0.03 + i * 0.03, (fresh ? 0.17 : 0.12) * (i ? 1 : 1.3), { pan: pan * 0.5, decay: 5, rev: 0.65, echo: 0.1, bright: 0.6 }))
       if (chain >= 1) this.piano(ARP[col] + 12, t + 0.012, 0.2 * boost, { pan: -pan, decay: 5, rev: 0.7, echo: 0.35 })
       if (chain >= 2) this.glass(ARP[col] + 19, t + 0.03, 0.05 * chain, { pan: -pan, dur: 3, rev: 0.9, echo: 0.5 })
     } else if (mark === 'present') {

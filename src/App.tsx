@@ -183,6 +183,17 @@ export default function App() {
   }
   const tile = (r: number, c: number) => center(tileEls.current[r * COLS + c])
 
+  // Another window in front: the music sinks away underwater until you come back.
+  useEffect(() => {
+    const away = () => snd.current.muffle(true), back = () => snd.current.muffle(false)
+    addEventListener('blur', away)
+    addEventListener('focus', back)
+    return () => {
+      removeEventListener('blur', away)
+      removeEventListener('focus', back)
+    }
+  }, [])
+
   useEffect(() => {
     const sync = () => setFull(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', sync)
