@@ -15,7 +15,7 @@ const HARM = [
   [45, 55, 60], // Am7 under E: A G C
   [40, 59, 62], // Em7 under G: E B D
   [43, 62, 65], // G7 under B: G D F
-  [48, 59, 64, 67], // Cmaj7 under the high C: C B E G
+  [55, 62, 64, 71], // Cmaj9 opening up under the high C, the boom: G D E B (the win's own low C and G sit beneath)
 ]
 const PENTA = [60, 62, 64, 67, 69, 72, 74, 76, 79, 81] // letters map onto this, so every word hums its own tune
 const ROOTS = [36, 33, 29, 31] // C A F G under a fixed E-G-B-D pad: Cmaj9, Am11, Fmaj13#11, G6/9
@@ -498,11 +498,13 @@ export class Sound {
     const pan = (col - 2) * 0.28
     if (mark === 'correct') {
       const boost = 1 + Math.max(0, chain) * 0.12
-      this.piano(ARP[col], t, (fresh ? 0.6 : 0.4) * boost, { pan, decay: 6, rev: 0.55, echo: fresh ? 0.4 : 0.2 })
-      // on the winning row, the chord blooms under it, rolled softly upward
-      if (won) HARM[col].forEach((m, i) => this.piano(m, t + 0.03 + i * 0.03, (fresh ? 0.17 : 0.12) * (i ? 1 : 1.3), { pan: pan * 0.5, decay: 5, rev: 0.65, echo: 0.1, bright: 0.6 }))
-      if (chain >= 1) this.piano(ARP[col] + 12, t + 0.012, 0.2 * boost, { pan: -pan, decay: 5, rev: 0.7, echo: 0.35 })
-      if (chain >= 2) this.glass(ARP[col] + 19, t + 0.03, 0.05 * chain, { pan: -pan, dur: 3, rev: 0.9, echo: 0.5 })
+      const peak = won && col === 4, top = ARP[col] // the winning row's last letter: a wider, longer chord, on the boom
+      this.piano(top, t, (fresh || peak ? 0.6 : 0.4) * boost, { pan, decay: peak ? 9 : 6, rev: 0.55, echo: fresh ? 0.4 : 0.2 })
+      // on the winning row, the chord blooms under it, rolled softly upward; the last one wide and quick, like a harp
+      if (won) HARM[col].forEach((m, i) => this.piano(m, t + (peak ? 0.012 + i * 0.02 : 0.03 + i * 0.03), peak ? 0.2 : (fresh ? 0.17 : 0.12) * (i ? 1 : 1.3), { pan: peak ? (i - 1.5) * 0.25 : pan * 0.5, decay: peak ? 8 : 5, rev: 0.7, echo: peak ? 0.25 : 0.1, bright: peak ? 0.85 : 0.6 }))
+      if (peak) this.glass(top, t + 0.02, 0.09, { dur: 4, rev: 1, echo: 0.5, scoop: false }) // and a bell on the top note
+      if (chain >= 1) this.piano(top + 12, t + 0.012, 0.2 * boost, { pan: -pan, decay: 5, rev: 0.7, echo: 0.35 })
+      if (chain >= 2) this.glass(top + 19, t + 0.03, 0.05 * chain, { pan: -pan, dur: 3, rev: 0.9, echo: 0.5 })
     } else if (mark === 'present') {
       this.glass(ARP[col] + 12, t, 0.2, { pan, dur: 2.2 })
     } else {
