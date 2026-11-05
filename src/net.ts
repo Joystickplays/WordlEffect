@@ -1,6 +1,5 @@
 // Playing together, peer to peer. Public Nostr relays only carry the WebRTC handshake; the game itself flows
 // directly between browsers. Every message is checked before use: a peer is someone else's code.
-// shortcut: STUN only, so strict NATs (some mobile and office networks) can't connect; add TURN via turnConfig.
 import { joinRoom, selfId } from 'trystero'
 import type { Lang } from './words.ts'
 
@@ -109,9 +108,24 @@ function localRoom(word: string) {
   return r
 }
 
-export function connect(word: string, on: Handlers) {
-  const local = new URLSearchParams(location.search).has('local')
-  const since = Date.now(), room: ReturnType<typeof localRoom> = local ? localRoom(word) : (joinRoom({ appId: 'wordleffect' }, word) as never), known = new Map<string, number>()
+// TURN servers (api/turn.js): a relay for when two networks won't connect directly. Fetched once a visit, and given
+// up on after 2 seconds, so a slow or missing relay never holds up players who can connect directly.
+// shortcut: the credentials last 12 hours; a page left open longer plays without the relay until reloaded.
+const local = () => new URLSearchParams(location.search).has('local')
+let turn: Promise<RTCIceServer[]> | null = null
+export function ice() {
+  if (local()) return Promise.resolve([])
+  return (turn ??= Promise.race([
+    fetch('/api/turn').then(r => r.json()).then((d: { iceServers?: unknown }) => (Array.isArray(d.iceServers) ? (d.iceServers as RTCIceServer[]) : [])),
+    new Promise<RTCIceServer[]>(r => setTimeout(() => r([]), 2000)),
+  ])
+    .catch(() => [])
+    .then(s => ((turn = s.length ? turn : null), s))) // try again next time if it didn't come
+}
+
+export function connect(word: string, on: Handlers, turnConfig: RTCIceServer[] = []) {
+  const room: ReturnType<typeof localRoom> = local() ? localRoom(word) : (joinRoom({ appId: 'wordleffect', ...(turnConfig.length && { turnConfig }) }, word) as never)
+  const since = Date.now(), known = new Map<string, number>()
   const hello = room.makeAction<Hello>('hello'), roomA = room.makeAction<Room>('room')
   const meA = room.makeAction<Me>('me'), lockA = room.makeAction<Lock>('lock'), evA = room.makeAction<Ev>('ev')
   // The host is whoever has been here longest: everyone works it out the same way, so no election is needed.

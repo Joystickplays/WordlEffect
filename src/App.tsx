@@ -3,7 +3,7 @@ import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, balance, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
+import { connect, ice, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
 import { Setup, Panel, Which, Icon } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 import { Echo } from './echoes.ts'
@@ -1172,9 +1172,13 @@ export default function App() {
   const onEv = useEffectEvent((e: Ev, from: string) => (e.k === 'rig' ? gotRig(e, from) : e.k === 'side' ? gotSide(e, from) : e.k === 'melt' ? gotMelt(e, from) : gotSwap(e, from)))
   useEffect(() => {
     if (!code) return
-    const c = (net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }))
+    let c: Net | null = null, gone = false
+    ice().then(servers => {
+      if (!gone) c = net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }, servers)
+    })
     return () => {
-      c.leave()
+      gone = true
+      c?.leave()
       net.current = null
     }
   }, [code])
@@ -1416,6 +1420,7 @@ export default function App() {
         className="corner together"
         aria-label={code ? 'Play alone' : 'Play together'}
         onMouseDown={e => e.preventDefault()}
+        onPointerEnter={() => !code && ice()} // fetch the relay while you reach for it
         onClick={() => (code ? leave() : goTo(pick(lang)))}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true">

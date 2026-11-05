@@ -178,6 +178,9 @@ can see everyone's skills.
 ### Good to know
 
 - Public Nostr relays introduce the players to each other. After that, the game goes browser to browser over WebRTC.
+- When two networks won't let browsers connect directly (mobile data, many home ISPs, strict office or school Wi-Fi),
+  the game goes through a Cloudflare TURN relay instead, so friends don't need to be on the same Wi-Fi. The relay
+  only ever carries colours, never your letters.
 - Like any peer-to-peer game, the people you play with can see your IP address.
 - Some networks block WebRTC, such as VPNs (Cloudflare WARP blocks it) and some office or mobile networks. If friends
   can't find each other, try turning the VPN off.
@@ -217,6 +220,19 @@ npm run build    # type-check and build to dist/
 npm run lint     # oxlint
 ```
 
+### Playing together across networks (TURN)
+
+Without TURN, players can usually connect only on the same network. To turn the relay on for a deployment:
+
+1. In the Cloudflare dashboard, open **Realtime → TURN Server** and create a TURN key. You get a key ID and an API
+   token.
+2. In the Vercel project, open **Settings → Environment Variables** and add `TURN_KEY_ID` and `TURN_KEY_API_TOKEN`.
+3. Redeploy.
+
+[`api/turn.js`](api/turn.js) uses the key to hand each player credentials that expire after 12 hours, so the key never
+reaches a browser. Without the variables it returns no relay, and the game connects directly as before. In
+`npm run dev`, `/api` is forwarded to the deployed site.
+
 The piano samples stream from the Tone.js sample host the first time you press a key, so you need to be online for
 the piano. Though, any other sample works just fine offline since they're synthesized right then in your browser.
 
@@ -230,6 +246,7 @@ the piano. Though, any other sample works just fine offline since they're synthe
 | [`src/gpu.ts`](src/gpu.ts) | A small instanced renderer: WebGPU with HDR, or WebGL2 |
 | [`src/audio.ts`](src/audio.ts) | The music: piano sampler, synths, reverb, echo, the beat grid and the drone |
 | [`src/net.ts`](src/net.ts) | Playing together: rooms, the host, and checking every message from other players |
+| [`api/turn.js`](api/turn.js) | Hands out short-lived TURN credentials, so players on different networks can connect |
 | [`src/Room.tsx`](src/Room.tsx) | Room settings and the other players' panels |
 | [`src/echoes.ts`](src/echoes.ts) | The echoes: bots that think, type and reveal, run by the host |
 | [`src/skills.ts`](src/skills.ts) | The six skills: names, what they do, and how often the reel lands on each |
