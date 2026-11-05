@@ -1,29 +1,25 @@
 // How to play: shown on your first visit, and from the ? in the corner. Escape, Enter or a click outside closes it.
-import { useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
+import { Crown } from './Room.tsx'
 
 const still = (e: { preventDefault(): void }) => e.preventDefault() // keep focus off, so keys still reach the board
-
-function Row({ word, marks }: { word: string; marks: string }) {
-  const k = { c: 'correct', p: 'present', a: 'absent' } as Record<string, string>
-  return (
-    <div className="row" aria-hidden="true">
-      {[...word].map((ch, i) => (
-        <div key={i} className={`tile filled ${k[marks[i]] ?? ''}`}>
-          <span>{ch}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
+const MARK = { c: 'correct', p: 'present', a: 'absent' } as Record<string, string>
+const step = (i: number) => ({ '--i': i }) as CSSProperties // each line arrives a moment after the one before
 
 export function Help({ together, close }: { together: boolean; close: () => void }) {
   const [tab, setTab] = useState(together ? 1 : 0)
+  const [leaving, setLeaving] = useState(false)
+  const shut = () => leaving || (setLeaving(true), setTimeout(close, 260))
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => (e.key === 'Escape' || e.key === 'Enter') && (e.preventDefault(), setLeaving(true), setTimeout(close, 260))
+    addEventListener('keydown', key)
+    return () => removeEventListener('keydown', key)
+  }, [close])
   return (
-    <div className="help" role="dialog" aria-modal="true" aria-label="How to play" onClick={close}>
+    <div className={`help ${leaving ? 'leaving' : ''}`} role="dialog" aria-modal="true" aria-label="How to play" onClick={shut}>
       <div className="sheet" onClick={e => e.stopPropagation()}>
-        <h2>WordlEffect</h2>
-        <p className="tag">It's Wordle, with eye candy. Every letter you find lights up the world, and the music plays along.</p>
-        <nav>
+        <p className="tag" style={step(0)}>wordle, with eye candy</p>
+        <nav style={step(1)}>
           {['alone', 'together'].map((t, i) => (
             <button key={t} className={tab === i ? 'on' : ''} aria-pressed={tab === i} onMouseDown={still} onClick={() => setTab(i)}>
               {t}
@@ -31,32 +27,29 @@ export function Help({ together, close }: { together: boolean; close: () => void
           ))}
         </nav>
         {tab === 0 ? (
-          <div className="page">
-            <p>Guess the five-letter word in six tries. Type a word and press <b>Enter</b>. Each letter is checked in turn, on the beat.</p>
-            <Row word="light" marks="cpaaa" />
-            <ul>
-              <li><b className="g">Green</b>: right letter, right place.</li>
-              <li><b className="y">Amber</b>: in the word, somewhere else.</li>
-              <li><b className="d">Dim</b>: not in the word.</li>
-            </ul>
-            <p>Every guess that finds a new green adds to your streak. The light grows, and the music swells with it.</p>
-            <p>In the bottom-left corner, <b>EN / ID</b> switches between English and Indonesian words, and <b>DAILY / ENDLESS</b> picks one word a day (today's Wordle word) or a new word every time.</p>
+          <div className="page" key="alone">
+            <p style={step(2)}>Five letters, six tries.</p>
+            <div className="row" aria-hidden="true" style={step(3)}>
+              {[...'light'].map((ch, i) => (
+                <div key={i} className={`tile filled ${MARK['cpaaa'[i]]}`} style={step(4 + i)}>
+                  <span>{ch}</span>
+                </div>
+              ))}
+            </div>
+            <p className="legend" style={step(5)}>
+              <b className="g">right spot</b> <b className="y">elsewhere</b> <b className="d">not in it</b>
+            </p>
+            <p style={step(6)}>New greens back to back grow the light, and the music.</p>
           </div>
         ) : (
-          <div className="page">
-            <p>Up to 8 players, each in their own colour. Everyone plays the same words at their own pace. You see their boards beside yours: colours only, never letters.</p>
-            <ul>
-              <li><b>Start a room</b> with the two-squares icon in the bottom-left corner. Its name is a word, like <i>amber</i>. Share the link, or have friends type the word on their board and press Enter.</li>
-              <li><b>Your name</b>: click it under the board in the room to change it.</li>
-              <li><b>The host</b> wears a crown. They've been in the room longest; they pick the settings and start the match.</li>
-              <li><b>Modes</b>: <i>last light</i> (fail a word and you're out; the last one lit wins), <i>tide</i> (a timed race for points), <i>stars</i> (first to solve 3 words).</li>
-              <li><b>Locks</b>: solve fast, or keep a long streak, and you send locks at whoever is ahead. They freeze one of that player's rows when they next guess.</li>
-              <li><b>Versus</b>: everyone for themselves, two teams, or all of you against bots called echoes.</li>
-              <li><b>Trials and skills</b> make it stranger. Every setting has an <i>i</i> beside it that explains it.</li>
-            </ul>
+          <div className="page" key="together">
+            <p style={step(2)}>A room is a word. Share the link, or type the word and press Enter.</p>
+            <p style={step(3)}>Same words, your own pace. Others' boards show colours, never letters.</p>
+            <p style={step(4)}><Crown /> picks the settings. Click your name to change it.</p>
+            <p style={step(5)}>Every setting has an <i>i</i>.</p>
           </div>
         )}
-        <button className="ok" onMouseDown={still} onClick={close}>
+        <button className="ok" style={step(7)} onMouseDown={still} onClick={shut}>
           got it
         </button>
       </div>

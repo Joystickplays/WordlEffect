@@ -1299,7 +1299,7 @@ export default function App() {
     }
   }, [undertow, rows.length, sealed, answer])
 
-  const press = useEffectEvent((k: string) => (help ? (k === 'enter' || k === 'escape') && unhelp() : onKey(k)))
+  const press = useEffectEvent((k: string) => !help && onKey(k)) // the tutorial handles its own keys
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest?.('input')) return // typing your name

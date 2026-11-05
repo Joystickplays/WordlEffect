@@ -1263,7 +1263,7 @@ canvas.fx {
   color: hsl(var(--h) 80% 72% / 0.35);
 }
 
-/* how to play */
+/* how to play: quiet glass over the game, each line drifting in after the last */
 .ask {
   right: 42px;
   font: 600 13px/16px inherit;
@@ -1276,111 +1276,148 @@ canvas.fx {
   z-index: 60;
   display: grid;
   place-items: center;
-  padding: 20px;
+  padding: 24px;
   overflow-y: auto;
-  background: radial-gradient(circle at 50% 40%, rgb(93 255 192 / 0.07), rgb(2 3 8 / 0.88) 50%, rgb(0 0 0 / 0.95));
-  animation: veil 0.4s ease-out;
+  background: rgb(2 3 8 / 0.22);
+  backdrop-filter: blur(4px);
+  animation: veil 0.5s ease-out both;
 }
-.help .sheet {
-  width: min(460px, 100%);
-  padding: 28px 30px 24px;
-  border: 1px solid rgb(150 170 255 / 0.14);
-  border-radius: 18px;
-  background: linear-gradient(170deg, rgb(20 26 48 / 0.85), rgb(8 10 20 / 0.9));
-  box-shadow: 0 0 60px rgb(93 255 192 / 0.06), 0 20px 60px rgb(0 0 0 / 0.5);
-  font-size: 14px;
-  line-height: 1.55;
-  color: rgb(215 225 250 / 0.82);
-  animation: rise 0.6s cubic-bezier(0.3, 1.4, 0.5, 1);
+.help.leaving {
+  animation: unveil 0.26s ease-in both;
 }
-@keyframes rise {
-  from {
-    translate: 0 12px;
+@keyframes unveil {
+  to {
     opacity: 0;
   }
 }
-.help h2 {
-  margin: 0;
-  font-size: 26px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  color: #fff;
-  text-shadow: 0 0 18px rgb(var(--g) / 0.7), 0 0 40px rgb(var(--g) / 0.35);
+.help .sheet {
+  width: min(380px, 100%);
+  padding: 56px 60px 48px;
+  border: 1px solid rgb(200 215 255 / 0.07);
+  border-radius: 22px;
+  background: rgb(12 15 28 / 0.28);
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgb(215 225 250 / 0.62);
+  animation: settle 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.help.leaving .sheet {
+  animation: lift 0.26s ease-in both;
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    filter: blur(6px);
+  }
+}
+@keyframes lift {
+  to {
+    opacity: 0;
+    scale: 0.98;
+    translate: 0 -6px;
+  }
+}
+/* lines arrive one by one, and again when you switch tabs */
+.help .tag,
+.help nav,
+.help .page > *,
+.help .ok {
+  animation: drift 0.6s calc(0.12s + var(--i) * 70ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes drift {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
 }
 .help .tag {
-  margin: 4px 0 16px;
-  color: rgb(205 220 255 / 0.55);
-  font-size: 13px;
+  margin: 0 0 28px;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: rgb(205 220 255 / 0.35);
 }
 .help nav {
   display: flex;
-  gap: 4px;
-  margin-bottom: 14px;
-  border-bottom: 1px solid rgb(150 170 255 / 0.12);
+  gap: 22px;
+  margin-bottom: 28px;
 }
 .help nav button,
 .help .ok {
   all: unset;
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
+  font-size: 10px;
+  letter-spacing: 0.24em;
   text-transform: uppercase;
+  transition: color 0.4s;
 }
 .help nav button {
-  padding: 6px 10px 8px;
-  margin-bottom: -1px;
-  border-bottom: 1px solid transparent;
-  color: rgb(205 220 255 / 0.4);
-  transition: color 0.3s, border-color 0.3s;
+  color: rgb(205 220 255 / 0.3);
 }
 .help nav button.on {
-  color: #fff;
-  border-color: rgb(var(--g) / 0.8);
+  color: rgb(235 242 255 / 0.85);
+}
+.help nav button:hover,
+.help .ok:hover {
+  color: rgb(235 242 255 / 0.85);
 }
 .help nav button:focus-visible,
 .help .ok:focus-visible {
-  outline: 1px solid rgb(var(--g) / 0.7);
-  outline-offset: 2px;
+  outline: 1px solid rgb(var(--g) / 0.5);
+  outline-offset: 4px;
 }
-.help .page p,
-.help .page ul {
-  margin: 0 0 10px;
+.help .page {
+  min-height: 150px;
 }
-.help ul {
-  padding-left: 18px;
+.help .page p {
+  margin: 0 0 14px;
 }
-.help li {
-  margin-bottom: 5px;
-}
-.help b {
-  color: #fff;
-  font-weight: 600;
-}
-.help b.g {
-  color: rgb(var(--g));
-}
-.help b.y {
-  color: rgb(var(--a));
-}
-.help b.d {
-  color: rgb(160 170 210 / 0.6);
+.help .crown {
+  margin: 0 0.3em 0 0;
 }
 .help .row {
-  --tile: 40px;
+  --tile: 34px;
   display: flex;
   gap: 6px;
-  margin: 12px 0;
+  margin: 22px 0 12px;
+}
+/* the sample word checks itself, letter by letter */
+.help .row .tile {
+  animation: check 0.7s calc(0.5s + var(--i) * 110ms) ease-out both;
+}
+@keyframes check {
+  from {
+    opacity: 0.25;
+    filter: brightness(2.4);
+  }
+}
+.help .legend {
+  display: flex;
+  gap: 14px;
+  font-size: 11px;
+}
+.help .legend b {
+  font-weight: 500;
+}
+.help b.g {
+  color: rgb(var(--g) / 0.8);
+}
+.help b.y {
+  color: rgb(var(--a) / 0.8);
+}
+.help b.d {
+  color: rgb(160 170 210 / 0.45);
 }
 .help .ok {
   display: block;
-  margin: 18px auto 0;
-  padding: 8px 18px;
-  border: 1px solid rgb(var(--g) / 0.5);
-  border-radius: 999px;
-  color: rgb(var(--g));
-  box-shadow: 0 0 18px rgb(var(--g) / 0.15);
+  margin: 24px auto 0;
+  color: rgb(var(--g) / 0.6);
 }
-.help .ok:hover {
-  background: rgb(var(--g) / 0.08);
+@media (prefers-reduced-motion: reduce) {
+  .help,
+  .help * {
+    animation-duration: 0.01s !important;
+    animation-delay: 0s !important;
+  }
 }
