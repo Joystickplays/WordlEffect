@@ -1,10 +1,10 @@
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { WORDS, anyWord, type Lang } from './words.ts'
 import { score, chains, balance, energyOf, tensionOf, best, points, winBonus, order, locksFor, trade, land, target, strictBreak, trialBonus, hash, squatLetter, compose, hardest, roll, type Mark, type Stats } from './game.ts'
 import { FX } from './fx.ts'
 import { Sound, BEAT, EIGHTH, BAR } from './audio.ts'
-import { connect, ice, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
-import { Setup, Panel, Which, Icon } from './Room.tsx'
+import { connect, ice, okName, selfId, COLOURS, DEFAULTS, has, type Net, type Room, type Settings, type Me, type Lock, type Ev, type Swap, type Board } from './net.ts'
+import { Setup, Panel, Which, Icon, Crown } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 import { Echo } from './echoes.ts'
 
@@ -23,7 +23,6 @@ const SHARDS = Array.from({ length: 64 }, (_, i) => ({
 // Echoes are twins: echo0 belongs to the first player by seat, and so on. They wear their twin's colour.
 const twinIn = (r: Room | null, id: string) => (r ? Object.keys(r.seats).sort((a, b) => r.seats[a] - r.seats[b])[+id.slice(4)] : undefined)
 const seatIn = (r: Room | null, id: string) => (r ? (r.seats[id] ?? r.seats[twinIn(r, id) ?? ''] ?? 0) : 0)
-const nameIn = (r: Room | null, id: string) => COLOURS[seatIn(r, id)][0] + (id.startsWith('echo') ? "'s echo" : '')
 
 // Which team a player is on: -1 when it's everyone for themselves.
 function teamIn(r: Room | null, id: string) {
@@ -110,7 +109,14 @@ export default function App() {
   const [code, setCode] = useState<string | null>(null) // the room's word
   const [room, setRoom] = useState<Room | null>(null)
   const [peers, setPeers] = useState<string[]>([])
-  const [host, setHost] = useState(true)
+  const [hostId, setHostId] = useState(selfId) // whoever has been in the room longest
+  const host = hostId === selfId
+  const [names, setNames] = useState<Record<string, string>>({}) // names people picked; the rest go by their colour
+  const [myName, setMyName] = useState(() => {
+    const n = localStorage.getItem('name')
+    return okName(n) ? n : ''
+  })
+  const [naming, setNaming] = useState(false)
   const [line, setLine] = useState('') // the one quiet line of text under the board
   const [live, setLive] = useState(false) // a match is being played
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
@@ -153,7 +159,10 @@ export default function App() {
   const score2 = [0, 1].map(t => (teams ? (teamOf(selfId) === t ? total : 0) + others.filter(id => teamOf(id) === t).reduce((s, id) => s + (snaps[id]?.round === room?.round ? snaps[id].score : 0), 0) : 0))
   const TEAM_NAMES = room?.settings.versus === 'echoes' ? ['team', 'echoes'] : ['dawn', 'dusk']
   const hueOf = (id: string) => COLOURS[seatIn(room, id)][1]
-  const nameOf = (id: string) => nameIn(room, id)
+  const nameOf = (id: string) => {
+    const who = id.startsWith('echo') ? (twinIn(room, id) ?? '') : id
+    return ((who === selfId ? myName : names[who]) || COLOURS[seatIn(room, id)][0]) + (id.startsWith('echo') ? "'s echo" : '')
+  }
 
   useEffect(() => {
     const f = (fx.current = new FX(canvas.current))
@@ -176,6 +185,39 @@ export default function App() {
     fx.current.letters(parseFloat(cs.fontSize), cs.fontFamily, cs.fontWeight)
   })
   useEffect(() => place(), [limit, code, others.length, live, cols])
+
+  // Someone new at the table: the boards already here glide over to make room, then the new one builds itself,
+  // row by row, each with a faint white flash and a fall of grey dust.
+  const placed = useRef<Record<string, DOMRect>>({})
+  const seen = others.join()
+  useLayoutEffect(() => {
+    const was = placed.current, now: Record<string, DOMRect> = {}, built: HTMLElement[] = []
+    let moved = false
+    for (const id of [selfId, ...seen.split(',').filter(Boolean)]) {
+      const el = id === selfId ? board.current.parentElement : panelEls.current[id]
+      if (!el) continue
+      const r = (now[id] = el.getBoundingClientRect()), p = was[id]
+      if (!p) {
+        if (id !== selfId) built.push(el)
+        continue
+      }
+      const dx = p.left - r.left, dy = p.top - r.top
+      if (reduced || (Math.abs(dx) < 1 && Math.abs(dy) < 1)) continue
+      moved = true
+      el.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], { duration: 550, easing: 'cubic-bezier(0.3, 0.8, 0.25, 1)' })
+    }
+    placed.current = now
+    if (reduced) return
+    built.forEach((el, k) => {
+      const start = (moved ? 750 : 200) + k * 180, rowEls = [...el.querySelectorAll<HTMLElement>('.board .row')]
+      rowEls.forEach((row, r) => {
+        const at = start + r * 75
+        row.animate([{ opacity: 0, filter: 'brightness(3)' }, { opacity: 1, filter: 'brightness(2)', offset: 0.25 }, { opacity: 1, filter: 'none' }], { duration: 500, delay: at, fill: 'backwards', easing: 'ease-out' })
+        setTimeout(() => row.isConnected && fx.current.arrive([...row.children].map(center)), at)
+      })
+      el.querySelector('figcaption')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 600, delay: start + rowEls.length * 75, fill: 'backwards' })
+    })
+  }, [seen, cols, limit])
 
   const center = (el: Element) => {
     const r = el.getBoundingClientRect()
@@ -443,7 +485,7 @@ export default function App() {
     history.replaceState(null, '', `#${word}`)
     peersRef.current = []
     setPeers([])
-    setHost(true)
+    setHostId(selfId)
     applyRoom({ settings: roomRef.current?.settings ?? { ...DEFAULTS, lang: solo }, phase: 'lobby', seed: 0, round: 0, seats: { [selfId]: 0 }, sides: { [selfId]: 0 }, echoes: [] })
     setRows([{ word, marks: Array(COLS).fill('correct') }]) // the room's word, lit, on the first row
     setLine('')
@@ -505,13 +547,23 @@ export default function App() {
     if (ids.length) setLine(l => (l === 'still looking for them' ? '' : l))
     peersRef.current = ids
     setPeers(ids)
-    setHost(h === selfId)
+    setHostId(h)
     hostRef.current = h
     // a match nobody is still playing in is over: open the lobby again
     const playing = r && Object.keys(r.seats).some(id => (id === selfId ? mp.current.live : ids.includes(id)))
     if (h === selfId && r) publish(r.phase === 'lobby' || !playing ? seat({ ...r, phase: 'lobby' }, ids) : r)
     net.current?.me(snapshot()) // newcomers need to see us too
     checkEnd()
+  }
+
+  // Your own name, in place of your colour. Anything that isn't a letter, number or plain mark is dropped.
+  function rename(raw: string) {
+    const n = raw.replace(/[^\p{L}\p{N} '._-]/gu, '').replace(/^[^\p{L}\p{N}]+/u, '').replace(/\s+/g, ' ').trim().slice(0, 12)
+    setNaming(false)
+    setMyName(n)
+    if (n) localStorage.setItem('name', n)
+    else localStorage.removeItem('name')
+    net.current?.name(n)
   }
 
   // The host changes a setting: always on top of the latest room.
@@ -1171,6 +1223,8 @@ export default function App() {
 
   const onRoom = useEffectEvent((r: Room) => applyRoom(r))
   const onPeers = useEffectEvent(peersChanged)
+  const onName = useEffectEvent((id: string, n: string) => setNames(ns => ({ ...ns, [id]: n })))
+  const myNameNow = useEffectEvent(() => myName)
   const onStale = useEffectEvent(() => setLine('refresh to play together'))
   const onMe = useEffectEvent(gotMe)
   const rigLate = useEffectEvent(() => rig && rigWith(rig.words[Math.floor(Math.random() * 3)]))
@@ -1185,7 +1239,8 @@ export default function App() {
     if (!code) return
     let c: Net | null = null, gone = false
     ice().then(servers => {
-      if (!gone) c = net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), stale: () => onStale() }, servers)
+      if (!gone) c = net.current = connect(code, { room: r => onRoom(r), me: (m, id) => onMe(m, id), lock: (l, id) => onLock(l, id), ev: (e, id) => onEv(e, id), peers: (ids, h) => onPeers(ids, h), name: (id, n) => onName(id, n), stale: () => onStale() }, servers)
+      c?.name(myNameNow())
     })
     return () => {
       gone = true
@@ -1241,7 +1296,7 @@ export default function App() {
   const press = useEffectEvent(onKey)
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest?.('input')) return // typing your name
       if ((e.target as Element).closest?.('button') && (e.key === 'Enter' || e.key === ' ')) return // the focused button handles it
       const k = e.key === 'Enter' ? 'enter' : e.key === 'Backspace' ? 'back' : e.key.toLowerCase()
       if (e.key === 'Escape') setAim(-1)
@@ -1295,7 +1350,7 @@ export default function App() {
       </div>
       {code && room && selfId in room.seats && (
         <figcaption style={{ '--h': hueOf(selfId) } as CSSProperties}>
-          you{live && <Which n={run.n} out={run.out} done={run.done} />}
+          you{host && peers.length > 0 && <Crown />}{live && <Which n={run.n} out={run.out} done={run.done} />}
         </figcaption>
       )}
       {live && room?.settings.skills && (
@@ -1313,7 +1368,7 @@ export default function App() {
       )}
       </figure>
       {code && room && others.map(id => (
-        <Panel key={id} side={teams ? teamOf(id) : -1} row={teams ? (teamOf(id) === teamOf(selfId) ? 1 : 2) : 0} seat={seatIn(room, id)} snap={snaps[id]?.round === room.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 && !id.startsWith('echo') ? () => cast(aim, id) : undefined} echo={id.startsWith('echo') ? nameOf(id) : undefined} el={e => { panelEls.current[id] = e }} />
+        <Panel key={id} side={teams ? teamOf(id) : -1} row={teams ? (teamOf(id) === teamOf(selfId) ? 1 : 2) : 0} seat={seatIn(room, id)} snap={snaps[id]?.round === room.round ? snaps[id] : undefined} rows={limit} live={live} pick={aim >= 0 && !id.startsWith('echo') ? () => cast(aim, id) : undefined} echo={id.startsWith('echo')} name={nameOf(id)} crown={id === hostId} el={e => { panelEls.current[id] = e }} />
       ))}
       </div>
       <aside className="hud right">
@@ -1376,13 +1431,20 @@ export default function App() {
         <p className="line">
           {ended ? ended.line : line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
           {lobby && room && selfId in room.seats && !line && (
-            <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}> · you're {COLOURS[room.seats[selfId]][0]}</span>
+            <span style={{ '--h': COLOURS[room.seats[selfId]][1] } as CSSProperties}>
+              {' · '}you're{' '}
+              {naming ? (
+                <input className="rename" autoFocus maxLength={12} defaultValue={myName} placeholder={COLOURS[room.seats[selfId]][0]} aria-label="Your name" onKeyDown={e => (e.key === 'Enter' ? rename(e.currentTarget.value) : e.key === 'Escape' && setNaming(false))} onBlur={e => rename(e.currentTarget.value)} />
+              ) : (
+                <button className="rename" onMouseDown={e => e.preventDefault()} onClick={() => setNaming(true)} title="Change your name">{myName || COLOURS[room.seats[selfId]][0]}</button>
+              )}
+            </span>
           )}
           {lobby && room && room.settings.versus === 'teams' && selfId in room.seats && !line && (
             <span className="sides">
               {[0, 1].map(t => (
                 <span key={t} className={`side-${t}`}>
-                  {TEAM_NAMES[t]}: {Object.keys(room.seats).filter(id => (id === selfId || peers.includes(id)) && teamOf(id) === t).map(id => (id === selfId ? 'you' : COLOURS[room.seats[id]][0])).join(', ') || '–'}
+                  {TEAM_NAMES[t]}: {Object.keys(room.seats).filter(id => (id === selfId || peers.includes(id)) && teamOf(id) === t).map(id => (id === selfId ? 'you' : nameOf(id))).join(', ') || '–'}
                 </span>
               ))}
               <button onMouseDown={e => e.preventDefault()} onClick={switchSide}>switch to {TEAM_NAMES[1 - teamOf(selfId)]}</button>

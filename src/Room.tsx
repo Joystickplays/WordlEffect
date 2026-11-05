@@ -118,6 +118,16 @@ export function Icon({ s }: { s: Skill }) {
   )
 }
 
+// The host: whoever has been in the room longest, and the one who picks the settings.
+export function Crown() {
+  return (
+    <svg viewBox="0 0 16 16" className="crown" role="img" aria-label="host">
+      <title>host: picks the settings</title>
+      <path d="M2 12.5h12l1-8-4 3-3-5.5-3 5.5-4-3z" />
+    </svg>
+  )
+}
+
 // Which word a player is on, under their board: "guessing the 2nd word", or that they've stopped.
 export function Which({ n, out, done }: { n: number; out?: boolean; done?: boolean }) {
   const k = n + 1, th = k % 100 >= 11 && k % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][k % 10] ?? 'th')
@@ -125,8 +135,8 @@ export function Which({ n, out, done }: { n: number; out?: boolean; done?: boole
 }
 
 // Someone else's board, the same size as yours: colours only, never letters.
-export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0, echo }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void; side?: number; row?: number; echo?: string }) {
-  const [hue, h] = COLOURS[seat], name = echo ?? hue, marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
+export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0, echo, name, crown }: { seat: number; snap?: Me; rows: number; live: boolean; pick?: () => void; el: (e: HTMLElement | null) => void; side?: number; row?: number; echo: boolean; name: string; crown: boolean }) {
+  const h = COLOURS[seat][1], marks = snap?.rows ?? [], sealed = snap?.sealed ?? 0
   return (
     <figure ref={el} className={`panel ${snap?.out ? 'out' : ''} ${pick ? 'aimable' : ''} ${side >= 0 ? `side-${side}` : ''} ${echo ? 'echo' : ''}`} style={{ '--h': h, '--pe': snap?.energy ?? 0, gridRow: row || undefined } as CSSProperties} onClick={pick} aria-label={pick ? `Swap boards with ${name}` : undefined}>
       <div className="board peer" aria-hidden="true">
@@ -143,6 +153,7 @@ export function Panel({ seat, snap, rows, live, pick, el, side = -1, row = 0, ec
       <figcaption>
         <span>
           {name}
+          {crown && <Crown />}
           {!!snap?.stars.length && <span className="stars"> {'✦'.repeat(snap.stars.length)}</span>}
         </span>
         {live && <Which n={snap?.n ?? 0} out={snap?.out} done={snap?.done} />}

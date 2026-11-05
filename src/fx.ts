@@ -40,6 +40,7 @@ type Particle = Pt & Look & {
   rgb: RGB; a: number; ang: number; px: number; py: number; cell: number
   path?: number[]
   orbit?: { cx: number; cy: number; r: number; a: number; w: number; grow: number; fling?: number }
+  curl?: number // turns its own heading, radians a second, easing off as it goes
   to?: RGB // shifts toward this colour over its life
   halo?: boolean // the first streak's loose glitter, not a ring
   ring?: { lv: number; a: number; w: number; j: number } | null
@@ -553,6 +554,15 @@ export class FX {
   }
 
   // A light going out: embers drifting up from someone's panel.
+  // A new board building itself: each row's boxes flash faintly, and grey dust falls from them, curls, and rises away.
+  arrive(row: Tile[]) {
+    for (const t of row) {
+      this.flash(t, 0.8)
+      for (let i = 0; i < Math.round(3 * this.q); i++)
+        this.add({ x: t.x + rand(-t.w / 2, t.w / 2), y: t.y + rand(0, t.w / 2), vx: rand(-40, 40), vy: rand(70, 150), drag: 0.975, grav: -150, curl: rand(2.5, 4.5) * pick([-1, 1]), life: rand(1.4, 2.4), rgb: hsl(220, 0.08, 0.72), a: 0.7, ...bit(0.7, 0.05, 1.2) })
+    }
+  }
+
   ember({ x, y }: Pt, hue: number) {
     this.burst(x, y, 40, { col: () => hsl(hue + rand(-15, 15), 0.6, 0.6), speed: [10, 60], life: [1.5, 3], scale: 0.7, drag: 0.97, grav: -25, sparks: 0.3, hot: 1.2 })
   }
@@ -755,6 +765,12 @@ export class FX {
         p.x = o.cx + Math.cos(o.a) * o.r
         p.y = o.cy + Math.sin(o.a) * o.r
       } else {
+        if (p.curl) {
+          const a = p.curl * dt, c = Math.cos(a), s = Math.sin(a), vx = p.vx
+          p.vx = vx * c - p.vy * s
+          p.vy = vx * s + p.vy * c
+          p.curl *= Math.exp(-dt * 1.4)
+        }
         const d = p.drag ** (dt * 60)
         p.vx *= d
         p.vy = p.vy * d + p.grav * dt

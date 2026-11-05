@@ -52,6 +52,8 @@ const okMe = (m: unknown): m is Me =>
   Array.isArray(m.squat) && m.squat.length <= 5 && m.squat.every(i => int(i, 0, 4)) && typeof m.rigged === 'boolean' &&
   typeof m.bag === 'string' && /^[tlwdms]{0,3}$/.test(m.bag) && typeof m.guard === 'string' && /^[mdw]{0,3}$/.test(m.guard)
 const echo = (x: unknown) => x === undefined || (typeof x === 'string' && /^echo\d$/.test(x))
+// A name you pick for yourself: short, plain letters and a little punctuation.
+export const okName = (n: unknown): n is string => typeof n === 'string' && /^[\p{L}\p{N}][\p{L}\p{N} '._-]{0,11}$/u.test(n)
 const okLock = (l: unknown): l is Lock => obj(l) && typeof l.to === 'string' && l.to.length < 64 && int(l.n, 1, 6) && echo(l.by)
 const id = (x: unknown) => typeof x === 'string' && x.length < 64
 const okEv = (e: unknown): e is Ev =>
@@ -69,6 +71,7 @@ export type Handlers = {
   lock(l: Lock, from: string): void
   ev(e: Ev, from: string): void
   peers(ids: string[], host: string): void // whenever someone arrives or leaves
+  name(id: string, name: string): void // someone named themselves
   stale(): void // someone is running a different version
 }
 
@@ -128,11 +131,16 @@ export function connect(word: string, on: Handlers, turnConfig: RTCIceServer[] =
   const since = Date.now(), known = new Map<string, number>()
   const hello = room.makeAction<Hello>('hello'), roomA = room.makeAction<Room>('room')
   const meA = room.makeAction<Me>('me'), lockA = room.makeAction<Lock>('lock'), evA = room.makeAction<Ev>('ev')
+  const nameA = room.makeAction<string>('name')
+  let mine = ''
   // The host is whoever has been here longest: everyone works it out the same way, so no election is needed.
   const host = () => [...known, [selfId, since] as const].sort((a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : 1))[0][0]
   const changed = () => on.peers([...known.keys()], host())
 
-  room.onPeerJoin = id => void hello.send({ v: V, since }, { target: id })
+  room.onPeerJoin = id => {
+    hello.send({ v: V, since }, { target: id })
+    if (mine) nameA.send(mine, { target: id })
+  }
   room.onPeerLeave = id => known.delete(id) && changed()
   hello.onMessage = (h, { peerId }) => {
     if (!obj(h) || !num(h.since, 0, 1e15)) return
@@ -144,6 +152,7 @@ export function connect(word: string, on: Handlers, turnConfig: RTCIceServer[] =
   // only the host speaks for echoes
   meA.onMessage = (m, { peerId }) => void (known.has(peerId) && okMe(m) && echo(m.bot) && (!m.bot || peerId === host()) && on.me(m, m.bot ?? peerId))
   lockA.onMessage = (l, { peerId }) => void (known.has(peerId) && okLock(l) && (!l.by || peerId === host()) && on.lock(l, l.by ?? peerId))
+  nameA.onMessage = (n, { peerId }) => void ((n === '' || okName(n)) && on.name(peerId, n)) // '' goes back to their colour
   evA.onMessage = (e, { peerId }) => void (known.has(peerId) && okEv(e) && on.ev(e, peerId))
 
   return {
@@ -152,6 +161,7 @@ export function connect(word: string, on: Handlers, turnConfig: RTCIceServer[] =
     me: (m: Me) => void (meA.send(m), m.bot && on.me(m, m.bot)),
     lock: (l: Lock) => void (lockA.send(l), l.by && on.lock(l, l.by)),
     ev: (e: Ev, to?: string) => void evA.send(e, { target: to }),
+    name: (n: string) => void ((mine = n), nameA.send(n)),
     leave: () => void room.leave(),
   }
 }

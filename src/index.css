@@ -1230,3 +1230,35 @@ canvas.fx {
   font-style: italic;
   color: hsl(var(--h) 25% 72% / 0.6);
 }
+
+/* the host's crown, beside their name */
+.crown {
+  width: 1.05em;
+  height: 1.05em;
+  margin-left: 0.4em;
+  vertical-align: -0.12em;
+  fill: hsl(45 100% 66%);
+  filter: drop-shadow(0 0 4px hsl(45 100% 55% / 0.7));
+}
+
+/* your name, under the board in the lobby: click it to change it */
+.line button.rename,
+.line input.rename {
+  font: inherit;
+  letter-spacing: inherit;
+  color: hsl(var(--h) 80% 72% / 0.95);
+  text-decoration: underline dotted hsl(var(--h) 80% 72% / 0.5);
+  text-underline-offset: 3px;
+}
+.line input.rename {
+  width: 12ch;
+  padding: 0 0 1px;
+  border: 0;
+  border-bottom: 1px solid hsl(var(--h) 80% 72% / 0.6);
+  background: none;
+  outline: none;
+  text-decoration: none;
+}
+.line input.rename::placeholder {
+  color: hsl(var(--h) 80% 72% / 0.35);
+}
