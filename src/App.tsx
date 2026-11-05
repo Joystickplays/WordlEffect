@@ -346,7 +346,7 @@ export default function App() {
     const t0 = snd.current.grid(EIGHTH), won = marks.every(m => m === 'correct')
     marks.forEach((m, i) => {
       const t = t0 + i * EIGHTH
-      snd.current.reveal(i, m, t, { chain: chain[i], fresh: isNew[i] })
+      snd.current.reveal(i, m, t, { chain: chain[i], fresh: isNew[i], won })
       snd.current.at(t, () => {
         if (m === 'correct') s.greens.add(i)
         if (m !== 'absent') s.found.add(word[i])

@@ -493,14 +493,14 @@ export class Sound {
     this.piano(50, t + 0.13, 0.15, { decay: 0.8, bright: 0.3, rev: 0.3, echo: 0 })
   }
 
-  reveal(col: number, mark: Mark, t: number, { chain, fresh }: { chain: number; fresh: boolean }) {
+  reveal(col: number, mark: Mark, t: number, { chain, fresh, won }: { chain: number; fresh: boolean; won: boolean }) {
     if (!this.ctx) return
     const pan = (col - 2) * 0.28
     if (mark === 'correct') {
       const boost = 1 + Math.max(0, chain) * 0.12
       this.piano(ARP[col], t, (fresh ? 0.6 : 0.4) * boost, { pan, decay: 6, rev: 0.55, echo: fresh ? 0.4 : 0.2 })
-      // the chord blooms under it, rolled softly upward
-      HARM[col].forEach((m, i) => this.piano(m, t + 0.03 + i * 0.03, (fresh ? 0.17 : 0.12) * (i ? 1 : 1.3), { pan: pan * 0.5, decay: 5, rev: 0.65, echo: 0.1, bright: 0.6 }))
+      // on the winning row, the chord blooms under it, rolled softly upward
+      if (won) HARM[col].forEach((m, i) => this.piano(m, t + 0.03 + i * 0.03, (fresh ? 0.17 : 0.12) * (i ? 1 : 1.3), { pan: pan * 0.5, decay: 5, rev: 0.65, echo: 0.1, bright: 0.6 }))
       if (chain >= 1) this.piano(ARP[col] + 12, t + 0.012, 0.2 * boost, { pan: -pan, decay: 5, rev: 0.7, echo: 0.35 })
       if (chain >= 2) this.glass(ARP[col] + 19, t + 0.03, 0.05 * chain, { pan: -pan, dur: 3, rev: 0.9, echo: 0.5 })
     } else if (mark === 'present') {
