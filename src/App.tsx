@@ -32,6 +32,16 @@ function teamIn(r: Room | null, id: string) {
   return r.sides[id] ?? 0
 }
 const saved = (): Lang => (localStorage.getItem('lang') === 'id' ? 'id' : 'en')
+const today = () => new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, in your own time zone, as Wordle does
+// the guesses you've made on a day's word, so a reload carries on instead of dealing a new one
+function kept(key: string): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(key) ?? '[]')
+    return Array.isArray(v) && v.every(w => typeof w === 'string' && /^[a-z]{5}$/.test(w)) ? v.slice(0, ROWS) : []
+  } catch {
+    return []
+  }
+}
 const fresh = (): Stats => ({ greens: new Set(), found: new Set(), guesses: 0, streak: 0 })
 // One match, kept in a ref: scheduled reveals read it long after the render that started them.
 const freshMatch = () => ({
@@ -74,6 +84,9 @@ function Meter({ value }: { value: number }) {
 
 export default function App() {
   const [solo, setSolo] = useState(saved) // the language you play alone in
+  const [daily, setDaily] = useState(() => localStorage.getItem('pace') === 'daily') // alone: one word a day, or endless
+  const dayKey = useRef('') // where today's guesses are kept, while you're on the daily word
+  const dailyAsk = useRef(0) // a newer board makes a daily word still loading stale
   const [answer, setAnswer] = useState(() => pick(saved()))
   const [rows, setRows] = useState<{ word: string; marks: Mark[] }[]>([])
   const [cur, setCur] = useState('')
@@ -217,7 +230,7 @@ export default function App() {
     if (gamble) return (k === 'enter' || k === ' ' || k === 'escape') && closeGamble()
     if (/^[123]$/.test(k)) return rig ? rigWith(rig.words[+k - 1]) : cast(+k - 1)
     if (phase === 'over') {
-      if (k === 'enter' && !code) restart()
+      if (k === 'enter' && !code && !daily) restart()
       else if (k === 'enter' && ended && host && roomRef.current) publish(seat({ ...roomRef.current, phase: 'lobby' }, peersRef.current))
       return
     }
@@ -250,7 +263,7 @@ export default function App() {
 
   function submit() {
     const word = compose(cur, Object.fromEntries(Object.entries(squat).map(([i, q]) => [i, q.ch])))
-    if (word.length < COLS || !WORDS[mp.current.live ? mp.current.S.lang : lang].valid.has(word)) return refuse(word.length < COLS ? 'Not enough letters' : 'Not in word list')
+    if (word.length < COLS || (word !== answer && !WORDS[mp.current.live ? mp.current.S.lang : lang].valid.has(word))) return refuse(word.length < COLS ? 'Not enough letters' : 'Not in word list')
     if (trial('strict') && strictBreak(word, rows)) {
       refuse('Keep the letters you found')
       return flash('keep the light you found')
@@ -266,6 +279,7 @@ export default function App() {
     const chain = chains(marks), isNew = marks.map((m, i) => m === 'correct' && !s.greens.has(i))
     s.guesses++
     setRows([...rows, { word, marks }])
+    if (dayKey.current) localStorage.setItem(dayKey.current, JSON.stringify([...rows.map(r => r.word), word]))
     setCur('')
     setShown(0)
     setPhase('busy')
@@ -374,6 +388,8 @@ export default function App() {
 
   // A fresh board. In a match the streak, score and clock carry on to the next word.
   function restart(word = pick(lang), keep = false) {
+    dailyAsk.current++
+    dayKey.current = ''
     fx.current.reset()
     snd.current.reset()
     stats.current = { ...fresh(), streak: keep ? stats.current.streak : 0 }
@@ -437,7 +453,8 @@ export default function App() {
     setPeers([])
     setLine('')
     history.replaceState(null, '', location.pathname + location.search)
-    restart()
+    if (daily) playDaily(solo)
+    else restart()
   }
 
   function applyRoom(r: Room) {
@@ -547,6 +564,35 @@ export default function App() {
       nextWord()
       if (m.echoHost === selfId) wake(m)
     })
+  }
+
+  // Daily: today's Wordle word in English (ours, picked by the date, if it can't be reached), or ours by the date
+  // in Indonesian. Coming back to it shows how far you got.
+  async function playDaily(l: Lang) {
+    const day = today(), list = WORDS[l].answers, ours = list[hash(day) % list.length], ask = ++dailyAsk.current
+    const word = await (l === 'en'
+      ? fetch(`/wordle/${day}.json`).then(r => r.json()).then((d: { solution?: unknown }) => (typeof d.solution === 'string' && /^[a-z]{5}$/.test(d.solution) ? d.solution : ours), () => ours)
+      : ours)
+    if (ask !== dailyAsk.current) return // you moved on while it loaded
+    restart(word)
+    dayKey.current = `daily:${l}:${day}`
+    const past = kept(dayKey.current).map(w => ({ word: w, marks: score(w, word) }))
+    if (!past.length) return
+    const s = stats.current, k: Record<string, Mark> = {}
+    for (const r of past)
+      r.marks.forEach((m, i) => {
+        if (m === 'correct') s.greens.add(i)
+        if (m !== 'absent') s.found.add(r.word[i])
+        k[r.word[i]] = best(k[r.word[i]], m)
+      })
+    s.guesses = past.length
+    setRows(past)
+    setKeys(k)
+    const won = past.at(-1)!.word === word
+    if (!won && past.length < ROWS) return
+    setResult(won ? 'won' : 'lost')
+    setGhost(COLS)
+    setPhase('over')
   }
 
   function nextWord() {
@@ -1138,6 +1184,7 @@ export default function App() {
     const w = location.hash.slice(1).toLowerCase()
     if (w && w !== code && anyWord(w)) goTo(w, true)
     else if (!w && code) leave()
+    else if (!w && daily && !dayKey.current) playDaily(solo)
   })
   useEffect(() => {
     const h = () => follow(), id = setTimeout(h) // after the light and sound exist
@@ -1309,6 +1356,7 @@ export default function App() {
           <span className="fuse" />
         </div>
       )}
+      {!code && daily && <p className="line">{phase === 'over' && 'a new word tomorrow'}</p>}
       {code && (
         <p className="line">
           {ended ? ended.line : line || (lobby && <button onMouseDown={e => e.preventDefault()} onClick={share}>share the word</button>)}
@@ -1340,7 +1388,7 @@ export default function App() {
                 <button
                   key={k}
                   aria-label={k === 'enter' ? 'Enter' : k === 'back' ? 'Delete' : k}
-                  className={`key ${(!trial('fading') && keys[k]) || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && ready && !cur : live ? !!ended && host : phase === 'over') ? 'beckon' : ''}`}
+                  className={`key ${(!trial('fading') && keys[k]) || ''} ${k.length > 1 ? 'wide' : ''} ${k === 'enter' && (lobby ? host && ready && !cur : live ? !!ended && host : phase === 'over' && !daily) ? 'beckon' : ''}`}
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => onKey(k)}
                 >
@@ -1384,10 +1432,26 @@ export default function App() {
             const next = solo === 'en' ? 'id' : 'en'
             localStorage.setItem('lang', next)
             setSolo(next)
-            restart(pick(next))
+            if (daily) playDaily(next)
+            else restart(pick(next))
           }}
         >
           {solo}
+        </button>
+      )}
+      {!code && (
+        <button
+          className="corner pace"
+          aria-label={daily ? 'Play endless words' : "Play today's word"}
+          onMouseDown={e => e.preventDefault()}
+          onClick={() => {
+            localStorage.setItem('pace', daily ? 'endless' : 'daily')
+            setDaily(!daily)
+            if (daily) restart(pick(solo))
+            else playDaily(solo)
+          }}
+        >
+          {daily ? 'daily' : 'endless'}
         </button>
       )}
       <a className="corner repo" href="https://github.com/Joystickplays/WordlEffect" target="_blank" rel="noopener noreferrer" aria-label="Source code on GitHub">

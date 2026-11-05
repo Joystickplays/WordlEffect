@@ -1,0 +1,3 @@
+{
+  "rewrites": [{ "source": "/wordle/:day.json", "destination": "https://www.nytimes.com/svc/wordle/v2/:day.json" }]
+}

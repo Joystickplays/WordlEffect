@@ -37,6 +37,11 @@ https://github.com/user-attachments/assets/45bbfa04-e233-458d-8001-7856e0133c96
 
 The faint **EN / ID** in the bottom-left corner switches between English and Indonesian words.
 
+Next to it, **DAILY / ENDLESS** picks how you play alone. **Endless** deals a new random word every time. **Daily**
+gives you one word a day: in English it's the same word as that day's
+[Wordle](https://www.nytimes.com/games/wordle), and in Indonesian it's picked from our list by the date. Your
+guesses are kept, so coming back carries on where you left off.
+
 Type a five-letter word and press **Enter**. Each letter is checked in turn, on the beat:
 
 | Tile | Meaning |
@@ -248,7 +253,9 @@ A few details worth knowing:
 ## Known limits
 
 - No internet, no piano. The rest of the music still plays.
-- Random word each round, no daily puzzle or saved stats.
+- No saved stats.
+- The daily English word comes from an unofficial Wordle address. If that address changes or can't be reached,
+  the daily uses a word from our list instead.
 - HDR in Safari isn't confirmed yet (see [HDR](#hdr)).
 - Playing together needs WebRTC, which some VPNs and networks block (see [Good to know](#good-to-know)).
 - Echoes live in the host's browser: if the host leaves mid-match, the echoes stop.
