@@ -1298,6 +1298,7 @@ canvas.fx {
   background: rgb(12 15 28 / 0.28);
   font-size: 13px;
   line-height: 1.6;
+  text-align: center;
   color: rgb(215 225 250 / 0.62);
   animation: settle 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
@@ -1340,6 +1341,7 @@ canvas.fx {
 }
 .help nav {
   display: flex;
+  justify-content: center;
   gap: 22px;
   margin-bottom: 28px;
 }
@@ -1379,6 +1381,7 @@ canvas.fx {
 .help .row {
   --tile: 34px;
   display: flex;
+  justify-content: center;
   gap: 6px;
   margin: 22px 0 12px;
 }
@@ -1394,6 +1397,7 @@ canvas.fx {
 }
 .help .legend {
   display: flex;
+  justify-content: center;
   gap: 14px;
   font-size: 11px;
 }
