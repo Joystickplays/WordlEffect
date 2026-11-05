@@ -18,7 +18,6 @@ export function Help({ together, close }: { together: boolean; close: () => void
   return (
     <div className={`help ${leaving ? 'leaving' : ''}`} role="dialog" aria-modal="true" aria-label="How to play" onClick={shut}>
       <div className="sheet" onClick={e => e.stopPropagation()}>
-        <p className="tag" style={step(0)}>wordle, with eye candy</p>
         <nav style={step(1)}>
           {['alone', 'together'].map((t, i) => (
             <button key={t} className={tab === i ? 'on' : ''} aria-pressed={tab === i} onMouseDown={still} onClick={() => setTab(i)}>
@@ -44,13 +43,14 @@ export function Help({ together, close }: { together: boolean; close: () => void
         ) : (
           <div className="page" key="together">
             <p style={step(2)}>A room is a word. Share the link, or type the word and press Enter.</p>
-            <p style={step(3)}>Same words, your own pace. Others' boards show colours, never letters.</p>
-            <p style={step(4)}><Crown /> picks the settings. Click your name to change it.</p>
-            <p style={step(5)}>Every setting has an <i>i</i>.</p>
+            <p style={step(3)}>Same set of words, your own pace.</p>
+            <p style={step(4)}>Spice the game with unique Skills that's sure to end friendships. In a good way.</p>
+            <p style={step(5)}><Crown /> The host picks the settings.</p>
+            <p style={step(6)}>Every setting has an <i>i</i>.</p>
           </div>
         )}
         <button className="ok" style={step(7)} onMouseDown={still} onClick={shut}>
-          got it
+          word up
         </button>
       </div>
     </div>
