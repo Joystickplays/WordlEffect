@@ -1262,3 +1262,125 @@ canvas.fx {
 .line input.rename::placeholder {
   color: hsl(var(--h) 80% 72% / 0.35);
 }
+
+/* how to play */
+.ask {
+  right: 42px;
+  font: 600 13px/16px inherit;
+  font-family: inherit;
+  text-align: center;
+}
+.help {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow-y: auto;
+  background: radial-gradient(circle at 50% 40%, rgb(93 255 192 / 0.07), rgb(2 3 8 / 0.88) 50%, rgb(0 0 0 / 0.95));
+  animation: veil 0.4s ease-out;
+}
+.help .sheet {
+  width: min(460px, 100%);
+  padding: 28px 30px 24px;
+  border: 1px solid rgb(150 170 255 / 0.14);
+  border-radius: 18px;
+  background: linear-gradient(170deg, rgb(20 26 48 / 0.85), rgb(8 10 20 / 0.9));
+  box-shadow: 0 0 60px rgb(93 255 192 / 0.06), 0 20px 60px rgb(0 0 0 / 0.5);
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgb(215 225 250 / 0.82);
+  animation: rise 0.6s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes rise {
+  from {
+    translate: 0 12px;
+    opacity: 0;
+  }
+}
+.help h2 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 0 18px rgb(var(--g) / 0.7), 0 0 40px rgb(var(--g) / 0.35);
+}
+.help .tag {
+  margin: 4px 0 16px;
+  color: rgb(205 220 255 / 0.55);
+  font-size: 13px;
+}
+.help nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgb(150 170 255 / 0.12);
+}
+.help nav button,
+.help .ok {
+  all: unset;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.help nav button {
+  padding: 6px 10px 8px;
+  margin-bottom: -1px;
+  border-bottom: 1px solid transparent;
+  color: rgb(205 220 255 / 0.4);
+  transition: color 0.3s, border-color 0.3s;
+}
+.help nav button.on {
+  color: #fff;
+  border-color: rgb(var(--g) / 0.8);
+}
+.help nav button:focus-visible,
+.help .ok:focus-visible {
+  outline: 1px solid rgb(var(--g) / 0.7);
+  outline-offset: 2px;
+}
+.help .page p,
+.help .page ul {
+  margin: 0 0 10px;
+}
+.help ul {
+  padding-left: 18px;
+}
+.help li {
+  margin-bottom: 5px;
+}
+.help b {
+  color: #fff;
+  font-weight: 600;
+}
+.help b.g {
+  color: rgb(var(--g));
+}
+.help b.y {
+  color: rgb(var(--a));
+}
+.help b.d {
+  color: rgb(160 170 210 / 0.6);
+}
+.help .row {
+  --tile: 40px;
+  display: flex;
+  gap: 6px;
+  margin: 12px 0;
+}
+.help .ok {
+  display: block;
+  margin: 18px auto 0;
+  padding: 8px 18px;
+  border: 1px solid rgb(var(--g) / 0.5);
+  border-radius: 999px;
+  color: rgb(var(--g));
+  box-shadow: 0 0 18px rgb(var(--g) / 0.15);
+}
+.help .ok:hover {
+  background: rgb(var(--g) / 0.08);
+}

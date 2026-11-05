@@ -7,6 +7,7 @@ import { connect, ice, okName, selfId, COLOURS, DEFAULTS, has, type Net, type Ro
 import { Setup, Panel, Which, Icon, Crown } from './Room.tsx'
 import { SKILLS, CODES, type Skill } from './skills.ts'
 import { Echo } from './echoes.ts'
+import { Help } from './Help.tsx'
 
 const ROWS = 6
 const COLS = 5
@@ -117,6 +118,11 @@ export default function App() {
     return okName(n) ? n : ''
   })
   const [naming, setNaming] = useState(false)
+  const [help, setHelp] = useState(() => !localStorage.getItem('taught')) // how to play, on your first visit
+  const unhelp = () => {
+    setHelp(false)
+    localStorage.setItem('taught', '1')
+  }
   const [line, setLine] = useState('') // the one quiet line of text under the board
   const [live, setLive] = useState(false) // a match is being played
   const [snaps, setSnaps] = useState<Record<string, Me>>({}) // everyone else's panel
@@ -1293,7 +1299,7 @@ export default function App() {
     }
   }, [undertow, rows.length, sealed, answer])
 
-  const press = useEffectEvent(onKey)
+  const press = useEffectEvent((k: string) => (help ? (k === 'enter' || k === 'escape') && unhelp() : onKey(k)))
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || (e.target as Element).closest?.('input')) return // typing your name
@@ -1537,6 +1543,10 @@ export default function App() {
           <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
         </svg>
       </a>
+      <button className="corner ask" aria-label="How to play" onMouseDown={e => e.preventDefault()} onClick={() => setHelp(true)}>
+        ?
+      </button>
+      {help && <Help together={!!code} close={unhelp} />}
       {gamble && (
         <div className={`gamble ${SKILLS[gamble.s].rarity} ${gamble.landed ? 'landed' : ''}`} role="dialog" aria-modal="true" aria-label="New skill" onClick={closeGamble}>
           <div className="reel-window">

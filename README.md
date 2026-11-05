@@ -95,6 +95,8 @@ Up to 8 people, peer to peer, with no server of ours in the middle.
   word, like `amber`. Share the link (`wordleffect.vercel.app/#amber`), or have friends type the word on the board.
 - **Everyone else is a panel.** Their boards sit beside yours, showing colours only, never letters. Each player is a
   colour: rose, gold, fern, mint, teal, sky, iris, violet.
+- **Names and the host.** Click your colour under the board in the lobby to give yourself a name. The host, whoever
+  has been in the room longest, wears a crown: they pick the settings and start the match.
 - **Same words for everyone.** You all play the same list of words, each at your own pace.
 - **Locks.** A long streak, or a solve in 3 guesses or fewer, sends locks to whoever is ahead. They wait beside that
   player's board and freeze rows when they next guess. A lock never takes your last row. Locks you earn melt your
@@ -248,6 +250,7 @@ the piano. Though, any other sample works just fine offline since they're synthe
 | [`src/net.ts`](src/net.ts) | Playing together: rooms, the host, and checking every message from other players |
 | [`api/turn.js`](api/turn.js) | Hands out short-lived TURN credentials, so players on different networks can connect |
 | [`src/Room.tsx`](src/Room.tsx) | Room settings and the other players' panels |
+| [`src/Help.tsx`](src/Help.tsx) | How to play: shown on your first visit, and from the **?** in the corner |
 | [`src/echoes.ts`](src/echoes.ts) | The echoes: bots that think, type and reveal, run by the host |
 | [`src/skills.ts`](src/skills.ts) | The six skills: names, what they do, and how often the reel lands on each |
 | [`src/words.ts`](src/words.ts) | English and Indonesian answers and guesses ([`valid.txt`](src/valid.txt), [`id/`](src/id/NOTICE.md)) |
